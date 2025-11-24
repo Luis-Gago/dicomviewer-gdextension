@@ -4,8 +4,16 @@ import sys
 
 from methods import print_error
 
+import platform
+if 'arch' not in ARGUMENTS:
+    machine = platform.machine()
+    if machine in ('arm64', 'aarch64'):
+        ARGUMENTS['arch'] = 'arm64'
+    elif machine == 'x86_64':
+        ARGUMENTS['arch'] = 'x86_64'
 
-libname = "EXTENSION-NAME"
+
+libname = "dicomviewer"
 projectdir = "demo"
 
 localEnv = Environment(tools=["default"], PLATFORM="")
@@ -36,6 +44,27 @@ Run the following command to download godot-cpp:
     sys.exit(1)
 
 env = SConscript("godot-cpp/SConstruct", {"env": env, "customs": customs})
+
+# Optional DCMTK support:
+use_dcmtk = ARGUMENTS.get('use_dcmtk', '0').lower() in ('1', 'yes', 'true')
+if use_dcmtk:
+    env.Append(CPPDEFINES=['USE_DCMTK'])
+    # ensure exceptions are enabled for DCMTK (DCMTK uses C++ exceptions)
+    env.Append(CCFLAGS=['-fexceptions'])
+    env.Append(CXXFLAGS=['-fexceptions'])
+    # Try common Homebrew and /usr include/lib locations; override with custom vars if needed:
+    dcmtk_inc = ARGUMENTS.get('dcmtk_inc', '/opt/homebrew/include:/usr/local/include:/usr/include')
+    dcmtk_lib = ARGUMENTS.get('dcmtk_lib', '/opt/homebrew/lib:/usr/local/lib:/usr/lib')
+    # Split and append
+    for p in dcmtk_inc.split(':'):
+        if p and os.path.isdir(p):
+            env.Append(CPPPATH=[p])
+    for p in dcmtk_lib.split(':'):
+        if p and os.path.isdir(p):
+            env.Append(LIBPATH=[p])
+    # Common DCMTK libs (may vary on your system)
+    env.Append(LIBS=['dcmimgle', 'dcmdata', 'oflog', 'ofstd'])
+    print("SCons: Building with DCMTK support (use_dcmtk=1). If DCMTK is in a custom location, pass dcmtk_inc and dcmtk_lib arguments.")
 
 env.Append(CPPPATH=["src/"])
 sources = Glob("src/*.cpp")
