@@ -63,7 +63,7 @@ if use_dcmtk:
         if p and os.path.isdir(p):
             env.Append(LIBPATH=[p])
     # Common DCMTK libs (may vary on your system)
-    env.Append(LIBS=['dcmimgle', 'dcmdata', 'oflog', 'ofstd'])
+    env.Append(LIBS=['dcmimgle', 'dcmdata', 'dcmjpeg', 'dcmjpls', 'ijg8', 'ijg12', 'ijg16', 'oflog', 'ofstd'])
     print("SCons: Building with DCMTK support (use_dcmtk=1). If DCMTK is in a custom location, pass dcmtk_inc and dcmtk_lib arguments.")
 
 env.Append(CPPPATH=["src/"])

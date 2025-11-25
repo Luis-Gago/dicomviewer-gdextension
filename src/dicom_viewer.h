@@ -39,6 +39,8 @@ public:
     void set_window_level(float window, float level);
     float get_window() const { return window_width; }
     float get_level() const { return window_center; }
+    void set_window(float window) { set_window_level(window, window_center); }
+    void set_level(float level) { set_window_level(window_width, level); }
 
     // Zoom / pan helpers
     void zoom_in();
