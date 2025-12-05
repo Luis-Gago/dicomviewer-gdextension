@@ -46,6 +46,11 @@ void DicomViewer::_bind_methods() {
     ClassDB::bind_method(D_METHOD("zoom_out"), &DicomViewer::zoom_out);
     ClassDB::bind_method(D_METHOD("reset_view"), &DicomViewer::reset_view);
     ClassDB::bind_method(D_METHOD("get_metadata"), &DicomViewer::get_metadata);
+    // Add preset window/level methods
+    ClassDB::bind_method(D_METHOD("apply_soft_tissue_preset"), &DicomViewer::apply_soft_tissue_preset);
+    ClassDB::bind_method(D_METHOD("apply_lung_preset"), &DicomViewer::apply_lung_preset);
+    ClassDB::bind_method(D_METHOD("apply_bone_preset"), &DicomViewer::apply_bone_preset);
+    // Remove the _gui_input binding - it's a virtual override
 
     ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "window"), "set_window", "get_window");
     ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "level"), "set_level", "get_level");
@@ -132,17 +137,23 @@ bool DicomViewer::load_dicom(const String &path) {
 
     if (ds->findAndGetOFString(DCM_RescaleSlope, ofstr).good()) {
         rescale_slope = atof(ofstr.c_str());
+        UtilityFunctions::print("Rescale Slope: ", rescale_slope);
     }
     if (ds->findAndGetOFString(DCM_RescaleIntercept, ofstr).good()) {
         rescale_intercept = atof(ofstr.c_str());
+        UtilityFunctions::print("Rescale Intercept: ", rescale_intercept);
     }
-    if (ds->findAndGetOFString(DCM_WindowCenter, ofstr).good()) {
+    
+    // WindowCenter and WindowWidth can have multiple values (multiple presets)
+    // We'll take the first value
+    if (ds->findAndGetOFString(DCM_WindowCenter, ofstr, 0).good()) {
         voi_center = atof(ofstr.c_str());
         have_voi = true;
+        UtilityFunctions::print("Window Center (VOI): ", voi_center);
     }
-    if (ds->findAndGetOFString(DCM_WindowWidth, ofstr).good()) {
+    if (ds->findAndGetOFString(DCM_WindowWidth, ofstr, 0).good()) {
         voi_width = atof(ofstr.c_str());
-        have_voi = true;
+        UtilityFunctions::print("Window Width (VOI): ", voi_width);
     }
 
     UtilityFunctions::print("Bits Allocated/Stored: ", bits_allocated, "/", bits_stored, 
@@ -163,46 +174,111 @@ bool DicomViewer::load_dicom(const String &path) {
     
     UtilityFunctions::print("Successfully loaded DICOM image via DicomImage: ", w, "x", h);
 
-    const int frame = 0;
-    const int bits = 16;
-    const void *pixel_ptr = dcm_image.getOutputData(bits, frame);
-    if (!pixel_ptr) {
-        UtilityFunctions::printerr("DCMTK Error: Failed to get pixel data");
-        return false;
+    // Get min/max values from DicomImage (these are already rescaled)
+    double minValue = 0.0;
+    double maxValue = 0.0;
+    if (dcm_image.getMinMaxValues(minValue, maxValue) > 0) {
+        UtilityFunctions::print("DicomImage reports min/max: ", minValue, " to ", maxValue);
     }
 
     raw_pixels.assign((size_t)w * (size_t)h, 0.0);
     raw_width = w;
     raw_height = h;
 
-    if (pixel_representation == 1) {
-        const int16_t *src_s = static_cast<const int16_t*>(pixel_ptr);
-        for (int i = 0; i < w * h; ++i) {
-            double phys = static_cast<double>(src_s[i]) * rescale_slope + rescale_intercept;
-            raw_pixels[i] = phys;
-        }
-    } else {
-        const uint16_t *src_u = static_cast<const uint16_t*>(pixel_ptr);
-        for (int i = 0; i < w * h; ++i) {
-            double phys = static_cast<double>(src_u[i]) * rescale_slope + rescale_intercept;
-            raw_pixels[i] = phys;
-        }
+    // Get internal pixel data which has modality LUT applied (rescale slope/intercept)
+    const DiPixel* pixelData = dcm_image.getInterData();
+    if (!pixelData) {
+        UtilityFunctions::printerr("DCMTK Error: Failed to get internal pixel data");
+        return false;
     }
 
+    // Get the representation (might be different from original)
+    EP_Representation pixelRep = pixelData->getRepresentation();
+    const void* dataPtr = pixelData->getData();
+    
+    if (!dataPtr) {
+        UtilityFunctions::printerr("DCMTK Error: Internal pixel data pointer is null");
+        return false;
+    }
+
+    double computed_min = 0.0, computed_max = 0.0;
+    bool first = true;
+
+    // Read based on actual internal representation
+    if (pixelRep == EPR_Sint16) {
+        const Sint16* pixels = static_cast<const Sint16*>(dataPtr);
+        for (int i = 0; i < w * h; ++i) {
+            double val = static_cast<double>(pixels[i]);
+            raw_pixels[i] = val;
+            
+            if (first) {
+                computed_min = computed_max = val;
+                first = false;
+            } else {
+                if (val < computed_min) computed_min = val;
+                if (val > computed_max) computed_max = val;
+            }
+        }
+    } else if (pixelRep == EPR_Uint16) {
+        const Uint16* pixels = static_cast<const Uint16*>(dataPtr);
+        for (int i = 0; i < w * h; ++i) {
+            double val = static_cast<double>(pixels[i]);
+            raw_pixels[i] = val;
+            
+            if (first) {
+                computed_min = computed_max = val;
+                first = false;
+            } else {
+                if (val < computed_min) computed_min = val;
+                if (val > computed_max) computed_max = val;
+            }
+        }
+    } else if (pixelRep == EPR_Sint32) {
+        const Sint32* pixels = static_cast<const Sint32*>(dataPtr);
+        for (int i = 0; i < w * h; ++i) {
+            double val = static_cast<double>(pixels[i]);
+            raw_pixels[i] = val;
+            
+            if (first) {
+                computed_min = computed_max = val;
+                first = false;
+            } else {
+                if (val < computed_min) computed_min = val;
+                if (val > computed_max) computed_max = val;
+            }
+        }
+    } else if (pixelRep == EPR_Uint32) {
+        const Uint32* pixels = static_cast<const Uint32*>(dataPtr);
+        for (int i = 0; i < w * h; ++i) {
+            double val = static_cast<double>(pixels[i]);
+            raw_pixels[i] = val;
+            
+            if (first) {
+                computed_min = computed_max = val;
+                first = false;
+            } else {
+                if (val < computed_min) computed_min = val;
+                if (val > computed_max) computed_max = val;
+            }
+        }
+    } else {
+        UtilityFunctions::printerr("DCMTK Error: Unsupported pixel representation: ", (int)pixelRep);
+        return false;
+    }
+
+    UtilityFunctions::print("Computed pixel value range: ", computed_min, " to ", computed_max);
+
     // If VOI WindowCenter/Width available, use them as defaults
-    if (have_voi) {
+    if (have_voi && voi_width > 0.0) {
         window_center = static_cast<float>(voi_center);
         window_width = static_cast<float>(voi_width);
+        UtilityFunctions::print("Using DICOM VOI Window/Level: ", window_width, " / ", window_center);
     } else {
         // Otherwise pick a sensible default from actual data range
-        double minv = raw_pixels[0], maxv = raw_pixels[0];
-        for (size_t i = 1; i < raw_pixels.size(); ++i) {
-            if (raw_pixels[i] < minv) minv = raw_pixels[i];
-            if (raw_pixels[i] > maxv) maxv = raw_pixels[i];
-        }
-        window_center = static_cast<float>((minv + maxv) * 0.5);
-        window_width = static_cast<float>((maxv - minv));
+        window_center = static_cast<float>((computed_min + computed_max) * 0.5);
+        window_width = static_cast<float>((computed_max - computed_min));
         if (window_width <= 0.0f) window_width = 1.0f;
+        UtilityFunctions::print("No VOI metadata, using calculated Window/Level: ", window_width, " / ", window_center);
     }
 
 #else
@@ -305,4 +381,17 @@ Dictionary DicomViewer::get_metadata() const {
     meta["note"] = "No DICOM library compiled; metadata unavailable";
 #endif
     return meta;
+}
+
+
+void DicomViewer::apply_soft_tissue_preset() {
+    set_window_level(400.0f, 40.0f);
+}
+
+void DicomViewer::apply_lung_preset() {
+    set_window_level(1500.0f, -600.0f);
+}
+
+void DicomViewer::apply_bone_preset() {
+    set_window_level(1800.0f, 400.0f);
 }

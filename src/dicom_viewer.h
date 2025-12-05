@@ -4,7 +4,8 @@
 #include <godot_cpp/classes/texture_rect.hpp>
 #include <godot_cpp/classes/image_texture.hpp>
 #include <godot_cpp/classes/image.hpp>
-#include <godot_cpp/core/gdvirtual.gen.inc>
+// #include <godot_cpp/classes/input_event.hpp>
+// #include <godot_cpp/classes/input_event_mouse_button.hpp>
 #include <vector>
 
 using namespace godot;
@@ -55,4 +56,9 @@ public:
 
     // Map raw pixels through window/level into the Image
     void apply_window_level();
+    
+    // Preset methods
+    void apply_soft_tissue_preset();
+    void apply_lung_preset();
+    void apply_bone_preset();
 };
