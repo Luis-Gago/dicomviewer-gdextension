@@ -1,15 +1,11 @@
 #include "register_types.h"
+#include "dicom_viewer.h"
+#include "radiology_case.h"  // ADD THIS LINE
 
 #include <gdextension_interface.h>
-#include <godot_cpp/core/class_db.hpp>
 #include <godot_cpp/core/defs.hpp>
+#include <godot_cpp/core/class_db.hpp>
 #include <godot_cpp/godot.hpp>
-
-#include "example_class.h"
-#include "summator.h"
-#include "traffic_light.h"
-#include "dicom_viewer.h"
-#include "my_player.h"
 
 using namespace godot;
 
@@ -18,11 +14,8 @@ void initialize_gdextension_types(ModuleInitializationLevel p_level)
     if (p_level != MODULE_INITIALIZATION_LEVEL_SCENE) {
         return;
     }
-    GDREGISTER_CLASS(ExampleClass);
-    GDREGISTER_CLASS(Summator);
-    GDREGISTER_CLASS(TrafficLight);
     GDREGISTER_CLASS(DicomViewer);
-    GDREGISTER_RUNTIME_CLASS(MyPlayer);
+    GDREGISTER_CLASS(RadiologyCase);  // ADD THIS LINE
 }
 
 void uninitialize_gdextension_types(ModuleInitializationLevel p_level) {
@@ -31,16 +24,18 @@ void uninitialize_gdextension_types(ModuleInitializationLevel p_level) {
     }
 }
 
-extern "C"
-{
-    // Initialization
-    GDExtensionBool GDE_EXPORT dicomviewer_library_init(GDExtensionInterfaceGetProcAddress p_get_proc_address, GDExtensionClassLibraryPtr p_library, GDExtensionInitialization *r_initialization)
-    {
-        GDExtensionBinding::InitObject init_obj(p_get_proc_address, p_library, r_initialization);
-        init_obj.register_initializer(initialize_gdextension_types);
-        init_obj.register_terminator(uninitialize_gdextension_types);
-        init_obj.set_minimum_library_initialization_level(MODULE_INITIALIZATION_LEVEL_SCENE);
+extern "C" {
+GDExtensionBool GDE_EXPORT gdextension_init(
+    GDExtensionInterfaceGetProcAddress p_get_proc_address,
+    const GDExtensionClassLibraryPtr p_library,
+    GDExtensionInitialization *r_initialization) {
+    
+    godot::GDExtensionBinding::InitObject init_obj(p_get_proc_address, p_library, r_initialization);
 
-        return init_obj.init();
-    }
+    init_obj.register_initializer(initialize_gdextension_types);
+    init_obj.register_terminator(uninitialize_gdextension_types);
+    init_obj.set_minimum_library_initialization_level(MODULE_INITIALIZATION_LEVEL_SCENE);
+
+    return init_obj.init();
+}
 }

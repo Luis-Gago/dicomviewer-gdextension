@@ -1,0 +1,102 @@
+[gd_scene load_steps=2 format=3 uid="uid://casesetup001"]
+
+[ext_resource type="Script" path="res://demo/case_setup_ui.gd" id="1"]
+
+[node name="CaseSetup" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+script = ExtResource("1")
+
+[node name="MarginContainer" type="MarginContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+theme_override_constants/margin_left = 20
+theme_override_constants/margin_top = 20
+theme_override_constants/margin_right = 20
+theme_override_constants/margin_bottom = 20
+
+[node name="VBoxContainer" type="VBoxContainer" parent="MarginContainer"]
+layout_mode = 2
+
+[node name="Title" type="Label" parent="MarginContainer/VBoxContainer"]
+layout_mode = 2
+text = "Create New Radiology Case"
+horizontal_alignment = 1
+
+[node name="HSeparator" type="HSeparator" parent="MarginContainer/VBoxContainer"]
+layout_mode = 2
+
+[node name="CaseNameLabel" type="Label" parent="MarginContainer/VBoxContainer"]
+layout_mode = 2
+text = "Case Name:"
+
+[node name="CaseNameEdit" type="LineEdit" parent="MarginContainer/VBoxContainer"]
+layout_mode = 2
+placeholder_text = "e.g., Chest CT - Pneumothorax Case 1"
+
+[node name="CaseDescriptionLabel" type="Label" parent="MarginContainer/VBoxContainer"]
+layout_mode = 2
+text = "Case Description:"
+
+[node name="CaseDescriptionEdit" type="TextEdit" parent="MarginContainer/VBoxContainer"]
+custom_minimum_size = Vector2(0, 100)
+layout_mode = 2
+placeholder_text = "Brief description of the case..."
+
+[node name="AddDicomButton" type="Button" parent="MarginContainer/VBoxContainer"]
+layout_mode = 2
+text = "Select DICOM Folder"
+
+[node name="DicomStatus" type="Label" parent="MarginContainer/VBoxContainer"]
+layout_mode = 2
+text = "No DICOM files loaded"
+
+[node name="HSeparator2" type="HSeparator" parent="MarginContainer/VBoxContainer"]
+layout_mode = 2
+
+[node name="QuestionsLabel" type="Label" parent="MarginContainer/VBoxContainer"]
+layout_mode = 2
+text = "Questions:"
+
+[node name="ScrollContainer" type="ScrollContainer" parent="MarginContainer/VBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="QuestionsContainer" type="VBoxContainer" parent="MarginContainer/VBoxContainer/ScrollContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="AddQuestionButton" type="Button" parent="MarginContainer/VBoxContainer"]
+layout_mode = 2
+text = "Add Question"
+
+[node name="HSeparator3" type="HSeparator" parent="MarginContainer/VBoxContainer"]
+layout_mode = 2
+
+[node name="ButtonsContainer" type="HBoxContainer" parent="MarginContainer/VBoxContainer"]
+layout_mode = 2
+
+[node name="BackButton" type="Button" parent="MarginContainer/VBoxContainer/ButtonsContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Back to Menu"
+
+[node name="SaveButton" type="Button" parent="MarginContainer/VBoxContainer/ButtonsContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Save Case"
+
+[node name="FolderDialog" type="FileDialog" parent="."]
+title = "Select DICOM Folder"
+size = Vector2i(800, 600)
+file_mode = 2
+
+[connection signal="pressed" from="MarginContainer/VBoxContainer/AddDicomButton" to="." method="_on_add_dicom_button_pressed"]
+[connection signal="pressed" from="MarginContainer/VBoxContainer/AddQuestionButton" to="." method="_on_add_question_button_pressed"]
+[connection signal="pressed" from="MarginContainer/VBoxContainer/ButtonsContainer/BackButton" to="." method="_on_back_button_pressed"]
+[connection signal="pressed" from="MarginContainer/VBoxContainer/ButtonsContainer/SaveButton" to="." method="_on_save_button_pressed"]
+[connection signal="dir_selected" from="FolderDialog" to="." method="_on_folder_dialog_dir_selected"]
