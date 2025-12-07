@@ -46,6 +46,9 @@ func _ready() -> void:
     
     # Ensure DicomViewer can receive mouse input
     dicom_viewer.mouse_filter = Control.MOUSE_FILTER_STOP
+
+    # Connect the gui_input signal - THIS IS MISSING!
+    dicom_viewer.gui_input.connect(_on_dicom_viewer_gui_input)
     
     print("DicomViewer Metadata Check: ", dicom_viewer.get_metadata())
     setup_ui()
@@ -439,3 +442,6 @@ func _unhandled_input(event: InputEvent) -> void:
                 _on_lung_button_pressed()
             KEY_3:
                 _on_bone_button_pressed()
+
+func _on_back_to_menu_button_pressed() -> void:
+    get_tree().change_scene_to_file("res://demo/main_menu.tscn")

@@ -162,6 +162,13 @@ layout_mode = 2
 text = "Ready"
 autowrap_mode = 2
 
+[node name="HSeparator4" type="HSeparator" parent="HSplitContainer/VBoxContainer"]
+layout_mode = 2
+
+[node name="BackToMenuButton" type="Button" parent="HSplitContainer/VBoxContainer"]
+layout_mode = 2
+text = "Back to Menu"
+
 [node name="FileDialog" type="FileDialog" parent="."]
 title = "Open DICOM Files"
 initial_position = 2
@@ -186,5 +193,6 @@ file_mode = 2
 [connection signal="pressed" from="HSplitContainer/VBoxContainer/WindowingPresets/BoneButton" to="." method="_on_bone_button_pressed"]
 [connection signal="toggled" from="HSplitContainer/VBoxContainer/ZoomControls/ZoomModeButton" to="." method="_on_zoom_mode_button_toggled"]
 [connection signal="pressed" from="HSplitContainer/VBoxContainer/ZoomControls/ResetButton" to="." method="_on_reset_button_pressed"]
+[connection signal="pressed" from="HSplitContainer/VBoxContainer/BackToMenuButton" to="." method="_on_back_to_menu_button_pressed"]
 [connection signal="files_selected" from="FileDialog" to="." method="_on_file_dialog_files_selected"]
 [connection signal="dir_selected" from="FolderDialog" to="." method="_on_folder_dialog_dir_selected"]

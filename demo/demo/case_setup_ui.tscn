@@ -47,8 +47,17 @@ custom_minimum_size = Vector2(0, 100)
 layout_mode = 2
 placeholder_text = "Brief description of the case..."
 
-[node name="AddDicomButton" type="Button" parent="MarginContainer/VBoxContainer"]
+[node name="DicomButtonsContainer" type="HBoxContainer" parent="MarginContainer/VBoxContainer"]
 layout_mode = 2
+
+[node name="AddDicomFilesButton" type="Button" parent="MarginContainer/VBoxContainer/DicomButtonsContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Select DICOM Files"
+
+[node name="AddDicomButton" type="Button" parent="MarginContainer/VBoxContainer/DicomButtonsContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
 text = "Select DICOM Folder"
 
 [node name="DicomStatus" type="Label" parent="MarginContainer/VBoxContainer"]
@@ -90,13 +99,20 @@ layout_mode = 2
 size_flags_horizontal = 3
 text = "Save Case"
 
+[node name="FileDialog" type="FileDialog" parent="."]
+title = "Select DICOM Files"
+size = Vector2i(800, 600)
+file_mode = 1
+
 [node name="FolderDialog" type="FileDialog" parent="."]
 title = "Select DICOM Folder"
 size = Vector2i(800, 600)
 file_mode = 2
 
-[connection signal="pressed" from="MarginContainer/VBoxContainer/AddDicomButton" to="." method="_on_add_dicom_button_pressed"]
+[connection signal="pressed" from="MarginContainer/VBoxContainer/DicomButtonsContainer/AddDicomFilesButton" to="." method="_on_add_dicom_files_button_pressed"]
+[connection signal="pressed" from="MarginContainer/VBoxContainer/DicomButtonsContainer/AddDicomButton" to="." method="_on_add_dicom_button_pressed"]
 [connection signal="pressed" from="MarginContainer/VBoxContainer/AddQuestionButton" to="." method="_on_add_question_button_pressed"]
 [connection signal="pressed" from="MarginContainer/VBoxContainer/ButtonsContainer/BackButton" to="." method="_on_back_button_pressed"]
 [connection signal="pressed" from="MarginContainer/VBoxContainer/ButtonsContainer/SaveButton" to="." method="_on_save_button_pressed"]
+[connection signal="files_selected" from="FileDialog" to="." method="_on_file_dialog_files_selected"]
 [connection signal="dir_selected" from="FolderDialog" to="." method="_on_folder_dialog_dir_selected"]

@@ -3,6 +3,7 @@ extends Control
 @onready var case_name_edit: LineEdit = $MarginContainer/VBoxContainer/CaseNameEdit
 @onready var case_description_edit: TextEdit = $MarginContainer/VBoxContainer/CaseDescriptionEdit
 @onready var questions_container: VBoxContainer = $MarginContainer/VBoxContainer/ScrollContainer/QuestionsContainer
+@onready var file_dialog: FileDialog = $FileDialog
 @onready var folder_dialog: FileDialog = $FolderDialog
 @onready var dicom_status: Label = $MarginContainer/VBoxContainer/DicomStatus
 
@@ -11,24 +12,72 @@ var dicom_files: PackedStringArray = []
 
 func _ready() -> void:
     current_case = RadiologyCase.new()
+    setup_file_dialogs()
+
+func setup_file_dialogs() -> void:
+    # File dialog for selecting multiple files
+    file_dialog.file_mode = FileDialog.FILE_MODE_OPEN_FILES
+    file_dialog.access = FileDialog.ACCESS_FILESYSTEM
+    file_dialog.use_native_dialog = true  # Use native OS file picker
+    # Accept all files - DICOM files often have no extension or various extensions
+    file_dialog.add_filter("*.dcm ; *.DCM", "DICOM Files")
+    file_dialog.add_filter("*", "All Files")
+    
+    # Folder dialog for selecting entire directories
+    folder_dialog.file_mode = FileDialog.FILE_MODE_OPEN_DIR
+    folder_dialog.access = FileDialog.ACCESS_FILESYSTEM
+    folder_dialog.use_native_dialog = true  # Use native OS folder picker
+
+func _on_add_dicom_files_button_pressed() -> void:
+    file_dialog.popup_centered(Vector2i(800, 600))
 
 func _on_add_dicom_button_pressed() -> void:
     folder_dialog.popup_centered(Vector2i(800, 600))
 
+func _on_file_dialog_files_selected(paths: PackedStringArray) -> void:
+    print("Selected files: ", paths)
+    load_files_from_paths(paths)
+
 func _on_folder_dialog_dir_selected(dir_path: String) -> void:
-    dicom_files = scan_directory_for_dicom(dir_path)
+    print("Selected folder: ", dir_path)
+    dicom_status.text = "Scanning folder..."
+    var files = scan_directory_for_dicom(dir_path)
+    print("Found ", files.size(), " files")
+    if files.size() > 0:
+        load_files_from_paths(files)
+    else:
+        dicom_status.text = "No files found in folder"
+
+func load_files_from_paths(paths: PackedStringArray) -> void:
+    dicom_files.clear()
     
-    var paths_array = Array()
-    for path in dicom_files:
-        paths_array.append(path)
-    current_case.set_dicom_file_paths(paths_array)
+    dicom_status.text = "Loading files..."
     
-    dicom_status.text = "Loaded %d DICOM files" % dicom_files.size()
+    for path in paths:
+        dicom_files.append(path)
+    
+    # Sort files alphabetically
+    dicom_files.sort()
+    
+    print("Total files to load: ", dicom_files.size())
+    
+    if dicom_files.size() > 0:
+        var paths_array = Array()
+        for path in dicom_files:
+            paths_array.append(path)
+        current_case.set_dicom_file_paths(paths_array)
+        
+        dicom_status.text = "Loaded %d DICOM files" % dicom_files.size()
+    else:
+        dicom_status.text = "No files found"
 
 func scan_directory_for_dicom(dir_path: String, recursive: bool = true) -> PackedStringArray:
     var found_files = PackedStringArray()
+    
     var dir = DirAccess.open(dir_path)
     if dir == null:
+        push_error("Failed to open directory: " + dir_path)
+        dicom_status.text = "Failed to open directory"
         return found_files
     
     dir.list_dir_begin()
@@ -40,17 +89,21 @@ func scan_directory_for_dicom(dir_path: String, recursive: bool = true) -> Packe
             continue
             
         var full_path = dir_path.path_join(file_name)
-        if dir.current_is_dir() and recursive:
-            var sub_files = scan_directory_for_dicom(full_path, recursive)
-            for sub_file in sub_files:
-                found_files.append(sub_file)
+        
+        if dir.current_is_dir():
+            # Recursively scan subdirectories if enabled
+            if recursive:
+                var sub_files = scan_directory_for_dicom(full_path, recursive)
+                for sub_file in sub_files:
+                    found_files.append(sub_file)
         else:
+            # Include all files - let DCMTK determine if they're valid DICOM
+            # Common DICOM naming: IM00001, 1.2.840..., *.dcm, no extension, etc.
             found_files.append(full_path)
         
         file_name = dir.get_next()
     
     dir.list_dir_end()
-    found_files.sort()
     return found_files
 
 func _on_add_question_button_pressed() -> void:
