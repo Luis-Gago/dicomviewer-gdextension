@@ -4,8 +4,6 @@
 #include <godot_cpp/classes/texture_rect.hpp>
 #include <godot_cpp/classes/image_texture.hpp>
 #include <godot_cpp/classes/image.hpp>
-// #include <godot_cpp/classes/input_event.hpp>
-// #include <godot_cpp/classes/input_event_mouse_button.hpp>
 #include <vector>
 
 using namespace godot;
@@ -26,6 +24,7 @@ class DicomViewer : public Control {
     float window_center;
     float zoom;
     Vector2 pan;
+    float pixel_aspect_ratio;
 
 protected:
     static void _bind_methods();
@@ -61,4 +60,7 @@ public:
     void apply_soft_tissue_preset();
     void apply_lung_preset();
     void apply_bone_preset();
+    
+    // Aspect ratio control
+    float get_pixel_aspect_ratio() const { return pixel_aspect_ratio; }
 };

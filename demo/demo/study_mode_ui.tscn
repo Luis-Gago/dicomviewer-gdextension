@@ -51,6 +51,19 @@ layout_mode = 2
 size_flags_horizontal = 3
 text = "Next Image (↓/S) →"
 
+[node name="ImageInfo" type="VBoxContainer" parent="HSplitContainer/LeftPanel/VSplitContainer/TopSection"]
+layout_mode = 2
+
+[node name="ImageInfoLabel" type="Label" parent="HSplitContainer/LeftPanel/VSplitContainer/TopSection/ImageInfo"]
+layout_mode = 2
+text = "Image Properties:"
+theme_override_font_sizes/font_size = 11
+
+[node name="AspectRatioLabel" type="Label" parent="HSplitContainer/LeftPanel/VSplitContainer/TopSection/ImageInfo"]
+layout_mode = 2
+text = "Aspect Ratio: 1:1 (square pixels)"
+theme_override_font_sizes/font_size = 10
+
 [node name="WindowControls" type="VBoxContainer" parent="HSplitContainer/LeftPanel/VSplitContainer/TopSection"]
 layout_mode = 2
 

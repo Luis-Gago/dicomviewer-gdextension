@@ -93,6 +93,22 @@ text = "Next (↓) →"
 [node name="HSeparator" type="HSeparator" parent="HSplitContainer/VBoxContainer"]
 layout_mode = 2
 
+[node name="ImageInfo" type="VBoxContainer" parent="HSplitContainer/VBoxContainer"]
+layout_mode = 2
+
+[node name="ImageInfoLabel" type="Label" parent="HSplitContainer/VBoxContainer/ImageInfo"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 12
+text = "Image Properties:"
+
+[node name="AspectRatioLabel" type="Label" parent="HSplitContainer/VBoxContainer/ImageInfo"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 11
+text = "Aspect Ratio: 1:1 (square pixels)"
+
+[node name="HSeparator5" type="HSeparator" parent="HSplitContainer/VBoxContainer"]
+layout_mode = 2
+
 [node name="WindowControl" type="VBoxContainer" parent="HSplitContainer/VBoxContainer"]
 layout_mode = 2
 

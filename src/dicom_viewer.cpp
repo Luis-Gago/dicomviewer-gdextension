@@ -16,6 +16,9 @@
 
 using namespace godot;
 
+// Uncomment this line to enable verbose DICOM loading debug output
+// #define DEBUG_DICOM_LOADING
+
 #ifdef USE_DCMTK
 // Static flag to ensure we only register codecs once
 static bool dcmtk_codecs_registered = false;
@@ -30,7 +33,9 @@ static void register_dcmtk_codecs() {
         DcmRLEDecoderRegistration::registerCodecs();
         
         dcmtk_codecs_registered = true;
+        #ifdef DEBUG_DICOM_LOADING
         UtilityFunctions::print("DCMTK decompression codecs registered");
+        #endif
     }
 }
 #endif
@@ -46,20 +51,23 @@ void DicomViewer::_bind_methods() {
     ClassDB::bind_method(D_METHOD("zoom_out"), &DicomViewer::zoom_out);
     ClassDB::bind_method(D_METHOD("reset_view"), &DicomViewer::reset_view);
     ClassDB::bind_method(D_METHOD("get_metadata"), &DicomViewer::get_metadata);
+    ClassDB::bind_method(D_METHOD("get_pixel_aspect_ratio"), &DicomViewer::get_pixel_aspect_ratio);
     // Add preset window/level methods
     ClassDB::bind_method(D_METHOD("apply_soft_tissue_preset"), &DicomViewer::apply_soft_tissue_preset);
     ClassDB::bind_method(D_METHOD("apply_lung_preset"), &DicomViewer::apply_lung_preset);
     ClassDB::bind_method(D_METHOD("apply_bone_preset"), &DicomViewer::apply_bone_preset);
-    // Remove the _gui_input binding - it's a virtual override
 
     ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "window"), "set_window", "get_window");
     ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "level"), "set_level", "get_level");
+    ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "pixel_aspect_ratio"), "", "get_pixel_aspect_ratio");
 }
 
 DicomViewer::DicomViewer() {
     texture_rect = memnew(TextureRect);
     add_child(texture_rect);
     texture_rect->set_anchors_preset(PRESET_FULL_RECT);
+    texture_rect->set_expand_mode(TextureRect::EXPAND_IGNORE_SIZE);
+    texture_rect->set_stretch_mode(TextureRect::STRETCH_KEEP_ASPECT_CENTERED);
 
     image_texture = Ref<ImageTexture>();
     image_data = Ref<Image>();
@@ -68,6 +76,7 @@ DicomViewer::DicomViewer() {
     window_center = 40.0f;
     zoom = 1.0f;
     pan = Vector2(0,0);
+    pixel_aspect_ratio = 1.0f;
 
     raw_width = raw_height = 0;
 }
@@ -91,6 +100,7 @@ bool DicomViewer::load_dicom(const String &path) {
         return false;
     }
 
+    #ifdef DEBUG_DICOM_LOADING
     // Print some diagnostic info about the image
     OFString transferSyntax;
     if (ds->findAndGetOFString(DCM_TransferSyntaxUID, transferSyntax).good()) {
@@ -103,6 +113,7 @@ bool DicomViewer::load_dicom(const String &path) {
     if (ds->findAndGetOFString(DCM_PhotometricInterpretation, photometricInterpretation).good()) {
         UtilityFunctions::print("Photometric Interpretation: ", photometricInterpretation.c_str());
     }
+    #endif
 
     // Read image dimensions
     Uint16 rows = 0, cols = 0;
@@ -116,7 +127,44 @@ bool DicomViewer::load_dicom(const String &path) {
         return false;
     }
 
+    #ifdef DEBUG_DICOM_LOADING
     UtilityFunctions::print("Image dimensions: ", cols, "x", rows);
+    #endif
+
+    // Read pixel spacing to maintain proper aspect ratio
+    double pixel_spacing_row = 1.0;
+    double pixel_spacing_col = 1.0;
+    bool have_pixel_spacing = false;
+    
+    // Try Pixel Spacing first (most common - for cross-sectional imaging)
+    if (ds->findAndGetFloat64(DCM_PixelSpacing, pixel_spacing_row, 0).good() &&
+        ds->findAndGetFloat64(DCM_PixelSpacing, pixel_spacing_col, 1).good()) {
+        have_pixel_spacing = true;
+        #ifdef DEBUG_DICOM_LOADING
+        UtilityFunctions::print("Pixel Spacing: ", pixel_spacing_row, " x ", pixel_spacing_col, " mm");
+        #endif
+    }
+    // Try Imager Pixel Spacing as fallback (for projection radiography)
+    else if (ds->findAndGetFloat64(DCM_ImagerPixelSpacing, pixel_spacing_row, 0).good() &&
+             ds->findAndGetFloat64(DCM_ImagerPixelSpacing, pixel_spacing_col, 1).good()) {
+        have_pixel_spacing = true;
+        #ifdef DEBUG_DICOM_LOADING
+        UtilityFunctions::print("Imager Pixel Spacing: ", pixel_spacing_row, " x ", pixel_spacing_col, " mm");
+        #endif
+    }
+    
+    // Calculate aspect ratio correction factor
+    if (have_pixel_spacing && pixel_spacing_col > 0.0) {
+        pixel_aspect_ratio = static_cast<float>(pixel_spacing_row / pixel_spacing_col);
+        #ifdef DEBUG_DICOM_LOADING
+        UtilityFunctions::print("Calculated Pixel Aspect Ratio: ", pixel_aspect_ratio);
+        #endif
+    } else {
+        pixel_aspect_ratio = 1.0f;
+        #ifdef DEBUG_DICOM_LOADING
+        UtilityFunctions::print("No pixel spacing found, assuming square pixels (1:1)");
+        #endif
+    }
 
     // Read some metadata values
     OFString ofstr;
@@ -137,11 +185,15 @@ bool DicomViewer::load_dicom(const String &path) {
 
     if (ds->findAndGetOFString(DCM_RescaleSlope, ofstr).good()) {
         rescale_slope = atof(ofstr.c_str());
+        #ifdef DEBUG_DICOM_LOADING
         UtilityFunctions::print("Rescale Slope: ", rescale_slope);
+        #endif
     }
     if (ds->findAndGetOFString(DCM_RescaleIntercept, ofstr).good()) {
         rescale_intercept = atof(ofstr.c_str());
+        #ifdef DEBUG_DICOM_LOADING
         UtilityFunctions::print("Rescale Intercept: ", rescale_intercept);
+        #endif
     }
     
     // WindowCenter and WindowWidth can have multiple values (multiple presets)
@@ -149,15 +201,21 @@ bool DicomViewer::load_dicom(const String &path) {
     if (ds->findAndGetOFString(DCM_WindowCenter, ofstr, 0).good()) {
         voi_center = atof(ofstr.c_str());
         have_voi = true;
+        #ifdef DEBUG_DICOM_LOADING
         UtilityFunctions::print("Window Center (VOI): ", voi_center);
+        #endif
     }
     if (ds->findAndGetOFString(DCM_WindowWidth, ofstr, 0).good()) {
         voi_width = atof(ofstr.c_str());
+        #ifdef DEBUG_DICOM_LOADING
         UtilityFunctions::print("Window Width (VOI): ", voi_width);
+        #endif
     }
 
+    #ifdef DEBUG_DICOM_LOADING
     UtilityFunctions::print("Bits Allocated/Stored: ", bits_allocated, "/", bits_stored, 
                            ", Pixel Representation: ", pixel_representation);
+    #endif
 
     // Use DicomImage - with codecs registered, it should handle decompression
     DicomImage dcm_image(path.utf8().get_data());
@@ -172,13 +230,17 @@ bool DicomViewer::load_dicom(const String &path) {
     const int w = dcm_image.getWidth();
     const int h = dcm_image.getHeight();
     
+    #ifdef DEBUG_DICOM_LOADING
     UtilityFunctions::print("Successfully loaded DICOM image via DicomImage: ", w, "x", h);
+    #endif
 
     // Get min/max values from DicomImage (these are already rescaled)
     double minValue = 0.0;
     double maxValue = 0.0;
     if (dcm_image.getMinMaxValues(minValue, maxValue) > 0) {
+        #ifdef DEBUG_DICOM_LOADING
         UtilityFunctions::print("DicomImage reports min/max: ", minValue, " to ", maxValue);
+        #endif
     }
 
     raw_pixels.assign((size_t)w * (size_t)h, 0.0);
@@ -266,19 +328,25 @@ bool DicomViewer::load_dicom(const String &path) {
         return false;
     }
 
+    #ifdef DEBUG_DICOM_LOADING
     UtilityFunctions::print("Computed pixel value range: ", computed_min, " to ", computed_max);
+    #endif
 
     // If VOI WindowCenter/Width available, use them as defaults
     if (have_voi && voi_width > 0.0) {
         window_center = static_cast<float>(voi_center);
         window_width = static_cast<float>(voi_width);
+        #ifdef DEBUG_DICOM_LOADING
         UtilityFunctions::print("Using DICOM VOI Window/Level: ", window_width, " / ", window_center);
+        #endif
     } else {
         // Otherwise pick a sensible default from actual data range
         window_center = static_cast<float>((computed_min + computed_max) * 0.5);
         window_width = static_cast<float>((computed_max - computed_min));
         if (window_width <= 0.0f) window_width = 1.0f;
+        #ifdef DEBUG_DICOM_LOADING
         UtilityFunctions::print("No VOI metadata, using calculated Window/Level: ", window_width, " / ", window_center);
+        #endif
     }
 
 #else
@@ -303,6 +371,7 @@ bool DicomViewer::load_dicom(const String &path) {
     }
     raw_width = w;
     raw_height = h;
+    pixel_aspect_ratio = 1.0f;
 
     window_center = 127.5f;
     window_width = 255.0f;
@@ -347,6 +416,28 @@ void DicomViewer::update_texture() {
 
     image_texture = ImageTexture::create_from_image(image_data);
     texture_rect->set_texture(image_texture);
+    
+    // Apply aspect ratio correction to the TextureRect's custom minimum size
+    // This ensures the image displays with correct physical proportions
+    if (pixel_aspect_ratio != 1.0f && raw_width > 0 && raw_height > 0) {
+        // Calculate the display size with aspect ratio correction
+        // If pixel_aspect_ratio > 1.0, pixels are taller than wide
+        // If pixel_aspect_ratio < 1.0, pixels are wider than tall
+        float display_width = static_cast<float>(raw_width);
+        float display_height = static_cast<float>(raw_height) * pixel_aspect_ratio;
+        
+        texture_rect->set_custom_minimum_size(Size2(display_width, display_height));
+        #ifdef DEBUG_DICOM_LOADING
+        UtilityFunctions::print("Applied aspect ratio correction - Display size: ", 
+                               display_width, "x", display_height);
+        #endif
+    } else {
+        // Square pixels or no data - use original dimensions
+        texture_rect->set_custom_minimum_size(Size2(
+            static_cast<float>(raw_width), 
+            static_cast<float>(raw_height)
+        ));
+    }
 }
 
 void DicomViewer::set_window_level(float window, float level) {
@@ -377,12 +468,13 @@ Dictionary DicomViewer::get_metadata() const {
     Dictionary meta;
 #ifdef USE_DCMTK
     meta["note"] = "DCMTK built-in; metadata available during load_dicom()";
+    meta["pixel_aspect_ratio"] = pixel_aspect_ratio;
 #else
     meta["note"] = "No DICOM library compiled; metadata unavailable";
+    meta["pixel_aspect_ratio"] = 1.0f;
 #endif
     return meta;
 }
-
 
 void DicomViewer::apply_soft_tissue_preset() {
     set_window_level(400.0f, 40.0f);

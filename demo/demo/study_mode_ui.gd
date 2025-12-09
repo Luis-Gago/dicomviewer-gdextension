@@ -19,6 +19,7 @@ extends Control
 @onready var level_slider: HSlider = $HSplitContainer/LeftPanel/VSplitContainer/TopSection/WindowControls/LevelSlider
 @onready var window_label: Label = $HSplitContainer/LeftPanel/VSplitContainer/TopSection/WindowControls/WindowLabel
 @onready var level_label: Label = $HSplitContainer/LeftPanel/VSplitContainer/TopSection/WindowControls/LevelLabel
+@onready var aspect_ratio_label: Label = $HSplitContainer/LeftPanel/VSplitContainer/TopSection/ImageInfo/AspectRatioLabel
 @onready var zoom_mode_button: Button = $HSplitContainer/LeftPanel/VSplitContainer/TopSection/ViewControls/ZoomModeButton
 @onready var reset_view_button: Button = $HSplitContainer/LeftPanel/VSplitContainer/TopSection/ViewControls/ResetViewButton
 @onready var notes_text: TextEdit = $HSplitContainer/LeftPanel/VSplitContainer/NotesPanel/NotesEdit
@@ -48,6 +49,10 @@ var user_adjusted_windowing: bool = false
 var pan_gesture_accumulator: float = 0.0
 var pan_gesture_threshold: float = 1.0
 
+# Performance optimization
+var is_loading: bool = false
+var pending_image_index: int = -1
+
 func _ready() -> void:
     set_anchors_preset(Control.PRESET_FULL_RECT)
     set_process_unhandled_input(true)
@@ -59,6 +64,9 @@ func _ready() -> void:
     
     # Hide explanation container initially
     explanation_container.visible = false
+    
+    # Initialize aspect ratio display
+    update_aspect_ratio_label()
     
     if case_path != "":
         load_case(case_path)
@@ -103,28 +111,53 @@ func load_case(path: String) -> void:
     display_current_question()
 
 func load_current_image() -> void:
+    # Prevent loading if already loading
+    if is_loading:
+        pending_image_index = current_image_index
+        return
+    
     if current_image_index >= 0 and current_image_index < dicom_files.size():
+        is_loading = true
+        
         var success = dicom_viewer.load_dicom(dicom_files[current_image_index])
         
         if success:
             image_index_label.text = "Image %d / %d" % [current_image_index + 1, dicom_files.size()]
+            
+            # Update aspect ratio display - only update label text, no expensive operations
+            var aspect_ratio = dicom_viewer.get_pixel_aspect_ratio()
+            if aspect_ratio == 1.0:
+                aspect_ratio_label.text = "Aspect Ratio: 1:1"
+            else:
+                aspect_ratio_label.text = "Aspect Ratio: %.2f:1" % aspect_ratio
             
             if is_zoomed_in:
                 dicom_viewer.reset_view()
                 is_zoomed_in = false
             
             if not user_adjusted_windowing:
+                # Block signals to prevent redundant updates
                 window_slider.set_block_signals(true)
                 level_slider.set_block_signals(true)
                 window_slider.value = dicom_viewer.get_window()
                 level_slider.value = dicom_viewer.get_level()
                 window_slider.set_block_signals(false)
                 level_slider.set_block_signals(false)
-                update_windowing_labels()
+                # Update labels without triggering value_changed
+                window_label.text = "Window: %.0f" % window_slider.value
+                level_label.text = "Level: %.0f" % level_slider.value
             else:
                 dicom_viewer.set_window_level(window_slider.value, level_slider.value)
         else:
             push_error("Failed to load DICOM: " + dicom_files[current_image_index])
+        
+        is_loading = false
+        
+        # Handle pending load if any
+        if pending_image_index != -1 and pending_image_index != current_image_index:
+            current_image_index = pending_image_index
+            pending_image_index = -1
+            call_deferred("load_current_image")
 
 func display_current_question() -> void:
     var questions = current_case.get_questions()
@@ -190,6 +223,13 @@ func update_windowing_labels() -> void:
     window_label.text = "Window: %.0f" % window_slider.value
     level_label.text = "Level: %.0f" % level_slider.value
 
+func update_aspect_ratio_label() -> void:
+    var aspect_ratio = dicom_viewer.get_pixel_aspect_ratio()
+    if aspect_ratio == 1.0:
+        aspect_ratio_label.text = "Aspect Ratio: 1:1"
+    else:
+        aspect_ratio_label.text = "Aspect Ratio: %.2f:1" % aspect_ratio
+
 func _on_submit_button_pressed() -> void:
     var questions = current_case.get_questions()
     var current_question = questions[current_question_index]
@@ -241,23 +281,14 @@ func _on_submit_button_pressed() -> void:
     next_question_button.disabled = false
     
 func show_explanation(question_index: int) -> void:
-    print("=== show_explanation called ===")
-    print("Question index: ", question_index)
-    print("Has explanation: ", current_case.has_explanation(question_index))
-    
     if not current_case.has_explanation(question_index):
-        print("No explanation available")
         explanation_container.visible = false
         return
     
     var explanation = current_case.get_question_explanation(question_index)
-    print("Explanation dictionary: ", explanation)
     
     var explanation_text = explanation.get("text", "")
     var explanation_images = explanation.get("images", [])
-    
-    print("Explanation text: ", explanation_text)
-    print("Explanation images: ", explanation_images)
     
     # Clear previous explanation content
     clear_explanation()
@@ -273,11 +304,9 @@ func show_explanation(question_index: int) -> void:
         text_label.size_flags_horizontal = Control.SIZE_FILL
         text_label.size_flags_vertical = Control.SIZE_EXPAND_FILL
         explanation_content.add_child(text_label)
-        print("Added text label to explanation_content")
     
     # Add explanation images
     for image_path in explanation_images:
-        print("Processing image: ", image_path)
         if FileAccess.file_exists(image_path):
             var image = Image.load_from_file(image_path)
             if image != null:
@@ -297,33 +326,24 @@ func show_explanation(question_index: int) -> void:
                 explanation_content.add_child(spacer)
                 
                 explanation_content.add_child(texture_rect)
-                print("Added image to explanation_content")
             else:
                 push_error("Failed to load explanation image: " + image_path)
         else:
             push_error("Explanation image not found: " + image_path)
     
-    # Show the explanation container and force update
+    # Show the explanation container
     explanation_container.visible = true
     explanation_container.show()
     explanation_scroll.visible = true
     explanation_scroll.show()
     
-    # Force multiple layout updates
+    # Single deferred layout update
     call_deferred("_force_layout_update")
 
 func _force_layout_update() -> void:
     explanation_container.queue_sort()
     explanation_scroll.queue_sort()
     explanation_content.queue_sort()
-    
-    await get_tree().process_frame
-    await get_tree().process_frame
-    
-    print("Final explanation_container size: ", explanation_container.size)
-    print("Final explanation_scroll size: ", explanation_scroll.size)
-    print("Final explanation_content size: ", explanation_content.size)
-    print("explanation_content children: ", explanation_content.get_child_count())
 
 func clear_explanation() -> void:
     for child in explanation_content.get_children():
@@ -334,11 +354,15 @@ func _on_next_question_button_pressed() -> void:
     display_current_question()
 
 func _on_prev_image_button_pressed() -> void:
+    if is_loading:
+        return
     if current_image_index > 0:
         current_image_index -= 1
         load_current_image()
 
 func _on_next_image_button_pressed() -> void:
+    if is_loading:
+        return
     if current_image_index < dicom_files.size() - 1:
         current_image_index += 1
         load_current_image()
