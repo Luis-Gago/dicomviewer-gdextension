@@ -35,4 +35,8 @@ public:
     void remove_question(int p_index);
     Array get_questions() const;
     void set_questions(const Array &p_questions);
+    
+    // Explanation methods
+    bool has_explanation(int p_question_index) const;
+    Dictionary get_question_explanation(int p_question_index) const;
 };

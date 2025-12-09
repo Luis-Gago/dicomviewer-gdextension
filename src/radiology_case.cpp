@@ -15,6 +15,9 @@ void RadiologyCase::_bind_methods() {
     ClassDB::bind_method(D_METHOD("remove_question", "index"), &RadiologyCase::remove_question);
     ClassDB::bind_method(D_METHOD("get_questions"), &RadiologyCase::get_questions);
     ClassDB::bind_method(D_METHOD("set_questions", "questions"), &RadiologyCase::set_questions);
+    
+    ClassDB::bind_method(D_METHOD("has_explanation", "question_index"), &RadiologyCase::has_explanation);
+    ClassDB::bind_method(D_METHOD("get_question_explanation", "question_index"), &RadiologyCase::get_question_explanation);
 
     ADD_PROPERTY(PropertyInfo(Variant::STRING, "case_name"), "set_case_name", "get_case_name");
     ADD_PROPERTY(PropertyInfo(Variant::STRING, "case_description"), "set_case_description", "get_case_description");
@@ -67,4 +70,38 @@ Array RadiologyCase::get_questions() const {
 
 void RadiologyCase::set_questions(const Array &p_questions) {
     questions = p_questions;
+}
+
+bool RadiologyCase::has_explanation(int p_question_index) const {
+    if (p_question_index < 0 || p_question_index >= questions.size()) {
+        return false;
+    }
+    
+    Dictionary question = questions[p_question_index];
+    if (!question.has("explanation")) {
+        return false;
+    }
+    
+    Dictionary explanation = question["explanation"];
+    String text = explanation.get("text", "");
+    Array images = explanation.get("images", Array());
+    
+    return !text.is_empty() || images.size() > 0;
+}
+
+Dictionary RadiologyCase::get_question_explanation(int p_question_index) const {
+    Dictionary empty_explanation;
+    empty_explanation["text"] = "";
+    empty_explanation["images"] = Array();
+    
+    if (p_question_index < 0 || p_question_index >= questions.size()) {
+        return empty_explanation;
+    }
+    
+    Dictionary question = questions[p_question_index];
+    if (!question.has("explanation")) {
+        return empty_explanation;
+    }
+    
+    return question["explanation"];
 }

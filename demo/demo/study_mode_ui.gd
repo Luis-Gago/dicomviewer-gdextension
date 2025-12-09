@@ -9,6 +9,10 @@ extends Control
 @onready var feedback_label: Label = $HSplitContainer/RightPanel/FeedbackLabel
 @onready var progress_label: Label = $HSplitContainer/RightPanel/ProgressLabel
 @onready var image_index_label: Label = $HSplitContainer/LeftPanel/VSplitContainer/TopSection/ImageControls/ImageIndexLabel
+@onready var answer_container: VBoxContainer = $HSplitContainer/RightPanel/AnswerContainer
+@onready var explanation_container: VBoxContainer = $HSplitContainer/RightPanel/ExplanationContainer
+@onready var explanation_scroll: ScrollContainer = $HSplitContainer/RightPanel/ExplanationContainer/ExplanationScroll
+@onready var explanation_content: VBoxContainer = $HSplitContainer/RightPanel/ExplanationContainer/ExplanationScroll/ExplanationContent
 
 # DICOM viewer controls
 @onready var window_slider: HSlider = $HSplitContainer/LeftPanel/VSplitContainer/TopSection/WindowControls/WindowSlider
@@ -27,6 +31,10 @@ var current_image_index: int = 0
 var dicom_files: Array = []
 var user_answers: Array = []
 
+# Multiple choice state
+var mc_button_group: ButtonGroup
+var mc_buttons: Array = []
+
 # DICOM viewer state
 var is_dragging: bool = false
 var drag_start_pos: Vector2
@@ -44,28 +52,28 @@ func _ready() -> void:
     set_anchors_preset(Control.PRESET_FULL_RECT)
     set_process_unhandled_input(true)
     
-    # Ensure DicomViewer can receive mouse input
     dicom_viewer.mouse_filter = Control.MOUSE_FILTER_STOP
+    mc_button_group = ButtonGroup.new()
     
     setup_dicom_controls()
+    
+    # Hide explanation container initially
+    explanation_container.visible = false
     
     if case_path != "":
         load_case(case_path)
 
 func setup_dicom_controls() -> void:
-    # Window slider setup
     window_slider.min_value = 1.0
     window_slider.max_value = 4000.0
     window_slider.value = 400.0
     window_slider.step = 1.0
     
-    # Level slider setup
     level_slider.min_value = -1000.0
     level_slider.max_value = 3000.0
     level_slider.value = 40.0
     level_slider.step = 1.0
     
-    # Connect signals only if not already connected
     if not window_slider.value_changed.is_connected(_on_window_slider_value_changed):
         window_slider.value_changed.connect(_on_window_slider_value_changed)
     if not level_slider.value_changed.is_connected(_on_level_slider_value_changed):
@@ -101,12 +109,10 @@ func load_current_image() -> void:
         if success:
             image_index_label.text = "Image %d / %d" % [current_image_index + 1, dicom_files.size()]
             
-            # Reset zoom when loading new file
             if is_zoomed_in:
                 dicom_viewer.reset_view()
                 is_zoomed_in = false
             
-            # Update sliders if user hasn't manually adjusted windowing
             if not user_adjusted_windowing:
                 window_slider.set_block_signals(true)
                 level_slider.set_block_signals(true)
@@ -116,7 +122,6 @@ func load_current_image() -> void:
                 level_slider.set_block_signals(false)
                 update_windowing_labels()
             else:
-                # Apply user's preferred window/level
                 dicom_viewer.set_window_level(window_slider.value, level_slider.value)
         else:
             push_error("Failed to load DICOM: " + dicom_files[current_image_index])
@@ -128,6 +133,8 @@ func display_current_question() -> void:
         return
     
     var question_dict = questions[current_question_index]
+    var question_type = question_dict.get("type", "free_text")
+    
     question_label.text = "Organ System: %s\n\nQuestion: %s" % [
         question_dict.get("organ_system", "Unknown"),
         question_dict.get("question", "")
@@ -139,12 +146,41 @@ func display_current_question() -> void:
         current_image_index = ref_index
         load_current_image()
     
-    answer_edit.text = ""
+    # Clear previous answer UI
+    answer_edit.visible = false
+    for btn in mc_buttons:
+        btn.queue_free()
+    mc_buttons.clear()
+    
+    # Hide explanation container
+    explanation_container.visible = false
+    clear_explanation()
+    
+    # Setup answer UI based on question type
+    if question_type == "multiple_choice":
+        setup_multiple_choice_ui(question_dict)
+    else:
+        setup_free_text_ui()
+    
     feedback_label.text = "Answer the question above"
     submit_button.disabled = false
     next_question_button.disabled = true
     
     update_progress()
+
+func setup_free_text_ui() -> void:
+    answer_edit.visible = true
+    answer_edit.text = ""
+
+func setup_multiple_choice_ui(question_dict: Dictionary) -> void:
+    var choices = question_dict.get("choices", [])
+    
+    for i in range(choices.size()):
+        var radio_button = CheckBox.new()
+        radio_button.text = choices[i]
+        radio_button.button_group = mc_button_group
+        answer_container.add_child(radio_button)
+        mc_buttons.append(radio_button)
 
 func update_progress() -> void:
     var total = current_case.get_questions().size()
@@ -154,29 +190,149 @@ func update_windowing_labels() -> void:
     window_label.text = "Window: %.0f" % window_slider.value
     level_label.text = "Level: %.0f" % level_slider.value
 
-# Question/Answer handling
 func _on_submit_button_pressed() -> void:
-    var user_answer = answer_edit.text.strip_edges()
     var questions = current_case.get_questions()
     var current_question = questions[current_question_index]
-    var expected_answer = current_question.get("expected_answer", "")
+    var question_type = current_question.get("type", "free_text")
+    
+    var user_answer = ""
+    var is_correct = false
+    var expected_answer = ""
+    
+    if question_type == "multiple_choice":
+        var selected_index = -1
+        for i in range(mc_buttons.size()):
+            if mc_buttons[i].button_pressed:
+                selected_index = i
+                user_answer = mc_buttons[i].text
+                break
+        
+        if selected_index == -1:
+            feedback_label.text = "Please select an answer"
+            return
+        
+        var correct_index = current_question.get("correct_index", -1)
+        is_correct = selected_index == correct_index
+        
+        if correct_index >= 0 and correct_index < mc_buttons.size():
+            expected_answer = mc_buttons[correct_index].text
+        
+        if is_correct:
+            feedback_label.text = "✓ Correct!"
+        else:
+            feedback_label.text = "✗ Incorrect\n\nCorrect Answer: %s" % expected_answer
+    else:
+        user_answer = answer_edit.text.strip_edges()
+        expected_answer = current_question.get("expected_answer", "")
+        feedback_label.text = "Expected Answer:\n\n%s" % expected_answer
     
     user_answers.append({
         "question": current_question.get("question", ""),
         "user_answer": user_answer,
-        "expected_answer": expected_answer
+        "expected_answer": expected_answer,
+        "type": question_type,
+        "is_correct": is_correct if question_type == "multiple_choice" else null
     })
     
-    feedback_label.text = "Expected Answer:\n\n%s" % expected_answer
+    # Show explanation if available
+    show_explanation(current_question_index)
     
     submit_button.disabled = true
     next_question_button.disabled = false
+    
+func show_explanation(question_index: int) -> void:
+    print("=== show_explanation called ===")
+    print("Question index: ", question_index)
+    print("Has explanation: ", current_case.has_explanation(question_index))
+    
+    if not current_case.has_explanation(question_index):
+        print("No explanation available")
+        explanation_container.visible = false
+        return
+    
+    var explanation = current_case.get_question_explanation(question_index)
+    print("Explanation dictionary: ", explanation)
+    
+    var explanation_text = explanation.get("text", "")
+    var explanation_images = explanation.get("images", [])
+    
+    print("Explanation text: ", explanation_text)
+    print("Explanation images: ", explanation_images)
+    
+    # Clear previous explanation content
+    clear_explanation()
+    
+    # Add explanation text
+    if explanation_text != "":
+        var text_label = RichTextLabel.new()
+        text_label.bbcode_enabled = true
+        text_label.text = "[b]Extended Explanation:[/b]\n\n" + explanation_text
+        text_label.fit_content = true
+        text_label.scroll_active = false
+        text_label.custom_minimum_size = Vector2(0, 150)
+        text_label.size_flags_horizontal = Control.SIZE_FILL
+        text_label.size_flags_vertical = Control.SIZE_EXPAND_FILL
+        explanation_content.add_child(text_label)
+        print("Added text label to explanation_content")
+    
+    # Add explanation images
+    for image_path in explanation_images:
+        print("Processing image: ", image_path)
+        if FileAccess.file_exists(image_path):
+            var image = Image.load_from_file(image_path)
+            if image != null:
+                var texture = ImageTexture.create_from_image(image)
+                
+                var texture_rect = TextureRect.new()
+                texture_rect.texture = texture
+                texture_rect.expand_mode = TextureRect.EXPAND_FIT_WIDTH_PROPORTIONAL
+                texture_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+                texture_rect.custom_minimum_size = Vector2(0, 300)
+                texture_rect.size_flags_horizontal = Control.SIZE_FILL
+                texture_rect.size_flags_vertical = Control.SIZE_EXPAND_FILL
+                
+                # Add some spacing
+                var spacer = Control.new()
+                spacer.custom_minimum_size = Vector2(0, 10)
+                explanation_content.add_child(spacer)
+                
+                explanation_content.add_child(texture_rect)
+                print("Added image to explanation_content")
+            else:
+                push_error("Failed to load explanation image: " + image_path)
+        else:
+            push_error("Explanation image not found: " + image_path)
+    
+    # Show the explanation container and force update
+    explanation_container.visible = true
+    explanation_container.show()
+    explanation_scroll.visible = true
+    explanation_scroll.show()
+    
+    # Force multiple layout updates
+    call_deferred("_force_layout_update")
+
+func _force_layout_update() -> void:
+    explanation_container.queue_sort()
+    explanation_scroll.queue_sort()
+    explanation_content.queue_sort()
+    
+    await get_tree().process_frame
+    await get_tree().process_frame
+    
+    print("Final explanation_container size: ", explanation_container.size)
+    print("Final explanation_scroll size: ", explanation_scroll.size)
+    print("Final explanation_content size: ", explanation_content.size)
+    print("explanation_content children: ", explanation_content.get_child_count())
+
+func clear_explanation() -> void:
+    for child in explanation_content.get_children():
+        child.queue_free()
 
 func _on_next_question_button_pressed() -> void:
     current_question_index += 1
     display_current_question()
 
-# Image navigation
 func _on_prev_image_button_pressed() -> void:
     if current_image_index > 0:
         current_image_index -= 1
@@ -187,7 +343,6 @@ func _on_next_image_button_pressed() -> void:
         current_image_index += 1
         load_current_image()
 
-# DICOM viewer controls
 func _on_window_slider_value_changed(value: float) -> void:
     user_adjusted_windowing = true
     dicom_viewer.set_window_level(value, level_slider.value)
@@ -212,7 +367,6 @@ func _on_reset_button_pressed() -> void:
     dicom_viewer.reset_view()
     is_zoomed_in = false
 
-# Windowing preset buttons
 func _on_soft_tissue_button_pressed() -> void:
     user_adjusted_windowing = true
     dicom_viewer.apply_soft_tissue_preset()
@@ -259,9 +413,7 @@ func zoom_into_position(click_pos: Vector2, zoom_factor: float) -> void:
     var new_position = click_pos - (texture_point * zoom_factor)
     texture_rect.position = new_position
 
-# Mouse input handling
 func _on_dicom_viewer_gui_input(event: InputEvent) -> void:
-    # Handle pan gesture events (macOS trackpad)
     if event is InputEventPanGesture:
         var pg = event as InputEventPanGesture
         pan_gesture_accumulator += pg.delta.y
@@ -277,7 +429,6 @@ func _on_dicom_viewer_gui_input(event: InputEvent) -> void:
     if event is InputEventMouseButton:
         var mb = event as InputEventMouseButton
         
-        # Zoom mode clicks
         if zoom_mode_active and mb.button_index == MOUSE_BUTTON_LEFT and mb.pressed:
             if is_zoomed_in:
                 dicom_viewer.reset_view()
@@ -289,7 +440,6 @@ func _on_dicom_viewer_gui_input(event: InputEvent) -> void:
             get_viewport().set_input_as_handled()
             return
         
-        # Mouse wheel for image navigation
         if not zoom_mode_active:
             if mb.button_index == MOUSE_BUTTON_WHEEL_UP and mb.pressed:
                 _on_prev_image_button_pressed()
@@ -300,7 +450,6 @@ func _on_dicom_viewer_gui_input(event: InputEvent) -> void:
                 get_viewport().set_input_as_handled()
                 return
         
-        # Left mouse drag for window/level adjustment
         if not zoom_mode_active and mb.button_index == MOUSE_BUTTON_LEFT:
             if mb.pressed:
                 is_dragging = true
@@ -323,7 +472,6 @@ func _on_dicom_viewer_gui_input(event: InputEvent) -> void:
         window_slider.value = clamp(new_window, window_slider.min_value, window_slider.max_value)
         level_slider.value = clamp(new_level, level_slider.min_value, level_slider.max_value)
 
-# Keyboard shortcuts
 func _unhandled_input(event: InputEvent) -> void:
     if event is InputEventKey and event.pressed:
         match event.keycode:
@@ -347,14 +495,35 @@ func show_completion() -> void:
     answer_edit.visible = false
     submit_button.visible = false
     next_question_button.visible = false
+    explanation_container.visible = false
+    
+    for btn in mc_buttons:
+        btn.queue_free()
+    mc_buttons.clear()
     
     var summary = "Review Summary:\n\n"
+    var mc_score = 0
+    var mc_total = 0
+    
     for i in range(user_answers.size()):
-        summary += "Q%d: %s\n" % [i + 1, user_answers[i]["question"]]
-        summary += "Your Answer: %s\n" % user_answers[i]["user_answer"]
-        summary += "Expected: %s\n\n" % user_answers[i]["expected_answer"]
+        var answer_data = user_answers[i]
+        summary += "Q%d: %s\n" % [i + 1, answer_data["question"]]
+        summary += "Your Answer: %s\n" % answer_data["user_answer"]
+        
+        if answer_data["type"] == "multiple_choice":
+            mc_total += 1
+            if answer_data.get("is_correct", false):
+                summary += "✓ Correct!\n\n"
+                mc_score += 1
+            else:
+                summary += "✗ Incorrect - Correct Answer: %s\n\n" % answer_data["expected_answer"]
+        else:
+            summary += "Expected: %s\n\n" % answer_data["expected_answer"]
+    
+    if mc_total > 0:
+        summary += "\nMultiple Choice Score: %d / %d (%.1f%%)" % [mc_score, mc_total, (float(mc_score) / mc_total) * 100.0]
     
     feedback_label.text = summary
 
 func _on_back_to_menu_button_pressed() -> void:
-    get_tree().change_scene_to_file("res://demo/main_menu.tscn")
+    get_tree().call_deferred("change_scene_to_file", "res://demo/main_menu.tscn")

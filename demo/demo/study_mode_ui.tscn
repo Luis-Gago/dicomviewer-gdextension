@@ -147,6 +147,9 @@ layout_mode = 2
 layout_mode = 2
 text = "Your Answer:"
 
+[node name="AnswerContainer" type="VBoxContainer" parent="HSplitContainer/RightPanel"]
+layout_mode = 2
+
 [node name="AnswerEdit" type="TextEdit" parent="HSplitContainer/RightPanel"]
 custom_minimum_size = Vector2(0, 150)
 layout_mode = 2
@@ -160,9 +163,32 @@ layout_mode = 2
 
 [node name="FeedbackLabel" type="Label" parent="HSplitContainer/RightPanel"]
 layout_mode = 2
-size_flags_vertical = 3
 text = "Feedback will appear here after submission"
 autowrap_mode = 3
+
+[node name="ExplanationContainer" type="VBoxContainer" parent="HSplitContainer/RightPanel"]
+custom_minimum_size = Vector2(0, 300)
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="HSeparator4" type="HSeparator" parent="HSplitContainer/RightPanel/ExplanationContainer"]
+layout_mode = 2
+
+[node name="ExplanationLabel" type="Label" parent="HSplitContainer/RightPanel/ExplanationContainer"]
+layout_mode = 2
+text = "Explanation:"
+theme_type_variation = &"HeaderMedium"
+
+[node name="ExplanationScroll" type="ScrollContainer" parent="HSplitContainer/RightPanel/ExplanationContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+horizontal_scroll_mode = 0
+vertical_scroll_mode = 2
+
+[node name="ExplanationContent" type="VBoxContainer" parent="HSplitContainer/RightPanel/ExplanationContainer/ExplanationScroll"]
+layout_mode = 2
+size_flags_horizontal = 3
 
 [node name="NextQuestionButton" type="Button" parent="HSplitContainer/RightPanel"]
 layout_mode = 2

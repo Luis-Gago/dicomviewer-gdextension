@@ -28,18 +28,13 @@ layout_mode = 2
 text = "Radiology Training System"
 horizontal_alignment = 1
 
-[node name="SetupModeButton" type="Button" parent="VBoxContainer"]
+[node name="CasesButton" type="Button" parent="VBoxContainer"]
 layout_mode = 2
-text = "Setup Mode (Create Cases)"
-
-[node name="StudyModeButton" type="Button" parent="VBoxContainer"]
-layout_mode = 2
-text = "Study Mode (Practice)"
+text = "Browse and Create Cases"
 
 [node name="ViewerModeButton" type="Button" parent="VBoxContainer"]
 layout_mode = 2
 text = "DICOM Viewer"
 
-[connection signal="pressed" from="VBoxContainer/SetupModeButton" to="." method="_on_setup_mode_button_pressed"]
-[connection signal="pressed" from="VBoxContainer/StudyModeButton" to="." method="_on_study_mode_button_pressed"]
+[connection signal="pressed" from="VBoxContainer/CasesButton" to="." method="_on_cases_button_pressed"]
 [connection signal="pressed" from="VBoxContainer/ViewerModeButton" to="." method="_on_viewer_mode_button_pressed"]
