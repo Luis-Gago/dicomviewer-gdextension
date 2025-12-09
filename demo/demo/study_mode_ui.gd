@@ -526,4 +526,5 @@ func show_completion() -> void:
     feedback_label.text = summary
 
 func _on_back_to_menu_button_pressed() -> void:
-    get_tree().call_deferred("change_scene_to_file", "res://demo/main_menu.tscn")
+    queue_free()
+    get_tree().change_scene_to_file("res://demo/main_menu.tscn")
