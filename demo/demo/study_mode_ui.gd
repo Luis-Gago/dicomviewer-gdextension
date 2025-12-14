@@ -20,6 +20,7 @@ extends Control
 @onready var window_label: Label = $HSplitContainer/LeftPanel/VSplitContainer/TopSection/WindowControls/WindowLabel
 @onready var level_label: Label = $HSplitContainer/LeftPanel/VSplitContainer/TopSection/WindowControls/LevelLabel
 @onready var aspect_ratio_label: Label = $HSplitContainer/LeftPanel/VSplitContainer/TopSection/ImageInfo/AspectRatioLabel
+@onready var modality_label: Label = $HSplitContainer/LeftPanel/VSplitContainer/TopSection/ImageInfo/ModalityLabel
 @onready var zoom_mode_button: Button = $HSplitContainer/LeftPanel/VSplitContainer/TopSection/ViewControls/ZoomModeButton
 @onready var reset_view_button: Button = $HSplitContainer/LeftPanel/VSplitContainer/TopSection/ViewControls/ResetViewButton
 @onready var notes_text: TextEdit = $HSplitContainer/LeftPanel/VSplitContainer/NotesPanel/NotesEdit
@@ -124,18 +125,27 @@ func load_current_image() -> void:
         if success:
             image_index_label.text = "Image %d / %d" % [current_image_index + 1, dicom_files.size()]
             
-            # Update aspect ratio display - only update label text, no expensive operations
+            # Update aspect ratio display
             var aspect_ratio = dicom_viewer.get_pixel_aspect_ratio()
             if aspect_ratio == 1.0:
                 aspect_ratio_label.text = "Aspect Ratio: 1:1"
             else:
                 aspect_ratio_label.text = "Aspect Ratio: %.2f:1" % aspect_ratio
             
+            # Update modality display
+            var modality = dicom_viewer.get_modality()
+            if modality != "":
+                modality_label.text = "Modality: " + modality
+            else:
+                modality_label.text = "Modality: Unknown"
+            
             if is_zoomed_in:
                 dicom_viewer.reset_view()
                 is_zoomed_in = false
             
             if not user_adjusted_windowing:
+                # Use modality-specific preset
+                dicom_viewer.apply_modality_preset()
                 # Block signals to prevent redundant updates
                 window_slider.set_block_signals(true)
                 level_slider.set_block_signals(true)
@@ -424,6 +434,50 @@ func _on_bone_button_pressed() -> void:
     level_slider.set_block_signals(false)
     update_windowing_labels()
 
+func _on_brain_button_pressed() -> void:
+    user_adjusted_windowing = true
+    dicom_viewer.apply_brain_preset()
+    window_slider.set_block_signals(true)
+    level_slider.set_block_signals(true)
+    window_slider.value = dicom_viewer.get_window()
+    level_slider.value = dicom_viewer.get_level()
+    window_slider.set_block_signals(false)
+    level_slider.set_block_signals(false)
+    update_windowing_labels()
+
+func _on_t2_brain_button_pressed() -> void:
+    user_adjusted_windowing = true
+    dicom_viewer.apply_t2_brain_preset()
+    window_slider.set_block_signals(true)
+    level_slider.set_block_signals(true)
+    window_slider.value = dicom_viewer.get_window()
+    level_slider.value = dicom_viewer.get_level()
+    window_slider.set_block_signals(false)
+    level_slider.set_block_signals(false)
+    update_windowing_labels()
+
+func _on_mammo_button_pressed() -> void:
+    user_adjusted_windowing = true
+    dicom_viewer.apply_mammography_preset()
+    window_slider.set_block_signals(true)
+    level_slider.set_block_signals(true)
+    window_slider.value = dicom_viewer.get_window()
+    level_slider.value = dicom_viewer.get_level()
+    window_slider.set_block_signals(false)
+    level_slider.set_block_signals(false)
+    update_windowing_labels()
+
+func _on_auto_button_pressed() -> void:
+    user_adjusted_windowing = false
+    dicom_viewer.apply_auto_preset()
+    window_slider.set_block_signals(true)
+    level_slider.set_block_signals(true)
+    window_slider.value = dicom_viewer.get_window()
+    level_slider.value = dicom_viewer.get_level()
+    window_slider.set_block_signals(false)
+    level_slider.set_block_signals(false)
+    update_windowing_labels()
+
 func zoom_into_position(click_pos: Vector2, zoom_factor: float) -> void:
     if dicom_viewer.get_child_count() == 0:
         return
@@ -513,6 +567,14 @@ func _unhandled_input(event: InputEvent) -> void:
                 _on_lung_button_pressed()
             KEY_3:
                 _on_bone_button_pressed()
+            KEY_4:
+                _on_brain_button_pressed()
+            KEY_5:
+                _on_t2_brain_button_pressed()
+            KEY_6:
+                _on_mammo_button_pressed()
+            KEY_0:
+                _on_auto_button_pressed()
 
 func show_completion() -> void:
     question_label.text = "Case Complete!"

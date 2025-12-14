@@ -52,14 +52,21 @@ void DicomViewer::_bind_methods() {
     ClassDB::bind_method(D_METHOD("reset_view"), &DicomViewer::reset_view);
     ClassDB::bind_method(D_METHOD("get_metadata"), &DicomViewer::get_metadata);
     ClassDB::bind_method(D_METHOD("get_pixel_aspect_ratio"), &DicomViewer::get_pixel_aspect_ratio);
+    ClassDB::bind_method(D_METHOD("get_modality"), &DicomViewer::get_modality);
+    ClassDB::bind_method(D_METHOD("apply_modality_preset"), &DicomViewer::apply_modality_preset);
     // Add preset window/level methods
     ClassDB::bind_method(D_METHOD("apply_soft_tissue_preset"), &DicomViewer::apply_soft_tissue_preset);
     ClassDB::bind_method(D_METHOD("apply_lung_preset"), &DicomViewer::apply_lung_preset);
     ClassDB::bind_method(D_METHOD("apply_bone_preset"), &DicomViewer::apply_bone_preset);
+    ClassDB::bind_method(D_METHOD("apply_brain_preset"), &DicomViewer::apply_brain_preset);
+    ClassDB::bind_method(D_METHOD("apply_t2_brain_preset"), &DicomViewer::apply_t2_brain_preset);
+    ClassDB::bind_method(D_METHOD("apply_mammography_preset"), &DicomViewer::apply_mammography_preset);
+    ClassDB::bind_method(D_METHOD("apply_auto_preset"), &DicomViewer::apply_auto_preset);
 
     ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "window"), "set_window", "get_window");
     ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "level"), "set_level", "get_level");
     ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "pixel_aspect_ratio"), "", "get_pixel_aspect_ratio");
+    ADD_PROPERTY(PropertyInfo(Variant::STRING, "modality"), "", "get_modality");
 }
 
 DicomViewer::DicomViewer() {
@@ -77,6 +84,11 @@ DicomViewer::DicomViewer() {
     zoom = 1.0f;
     pan = Vector2(0,0);
     pixel_aspect_ratio = 1.0f;
+    current_modality = "";
+    
+    original_window_width = 400.0f;
+    original_window_center = 40.0f;
+    has_original_voi = false;
 
     raw_width = raw_height = 0;
 }
@@ -98,6 +110,17 @@ bool DicomViewer::load_dicom(const String &path) {
     if (!ds) {
         UtilityFunctions::printerr("DCMTK Error: No dataset found");
         return false;
+    }
+
+    // Read modality for auto-preset selection
+    OFString modality;
+    if (ds->findAndGetOFString(DCM_Modality, modality).good()) {
+        current_modality = String(modality.c_str());
+        #ifdef DEBUG_DICOM_LOADING
+        UtilityFunctions::print("Modality detected: ", current_modality);
+        #endif
+    } else {
+        current_modality = "";
     }
 
     #ifdef DEBUG_DICOM_LOADING
@@ -336,6 +359,9 @@ bool DicomViewer::load_dicom(const String &path) {
     if (have_voi && voi_width > 0.0) {
         window_center = static_cast<float>(voi_center);
         window_width = static_cast<float>(voi_width);
+        original_window_center = window_center;
+        original_window_width = window_width;
+        has_original_voi = true;
         #ifdef DEBUG_DICOM_LOADING
         UtilityFunctions::print("Using DICOM VOI Window/Level: ", window_width, " / ", window_center);
         #endif
@@ -344,6 +370,9 @@ bool DicomViewer::load_dicom(const String &path) {
         window_center = static_cast<float>((computed_min + computed_max) * 0.5);
         window_width = static_cast<float>((computed_max - computed_min));
         if (window_width <= 0.0f) window_width = 1.0f;
+        original_window_center = window_center;
+        original_window_width = window_width;
+        has_original_voi = false;
         #ifdef DEBUG_DICOM_LOADING
         UtilityFunctions::print("No VOI metadata, using calculated Window/Level: ", window_width, " / ", window_center);
         #endif
@@ -486,4 +515,45 @@ void DicomViewer::apply_lung_preset() {
 
 void DicomViewer::apply_bone_preset() {
     set_window_level(1800.0f, 400.0f);
+}
+
+void DicomViewer::apply_brain_preset() {
+    set_window_level(80.0f, 40.0f);  // T1-weighted brain
+}
+
+void DicomViewer::apply_t2_brain_preset() {
+    set_window_level(160.0f, 80.0f);  // T2-weighted brain
+}
+
+void DicomViewer::apply_mammography_preset() {
+    set_window_level(4000.0f, 2000.0f);  // Full range for mammo
+}
+
+void DicomViewer::apply_auto_preset() {
+    // Restore the original DICOM VOI values
+    if (has_original_voi) {
+        set_window_level(original_window_width, original_window_center);
+    } else {
+        // If no original VOI, just refresh with current values
+        apply_window_level();
+        update_texture();
+    }
+}
+
+void DicomViewer::apply_modality_preset() {
+    // Auto-select appropriate windowing based on detected modality
+    if (current_modality == "CT") {
+        apply_soft_tissue_preset();
+    } else if (current_modality == "MR") {
+        // Check for specific MR sequences if available
+        apply_brain_preset();  // Default to T1 brain
+    } else if (current_modality == "MG") {
+        apply_mammography_preset();
+    } else if (current_modality == "CR" || current_modality == "DX") {
+        // Computed/Digital Radiography
+        set_window_level(2000.0f, 1000.0f);
+    } else {
+        // Fall back to auto preset from DICOM VOI
+        apply_auto_preset();
+    }
 }

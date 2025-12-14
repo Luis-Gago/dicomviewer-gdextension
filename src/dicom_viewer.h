@@ -6,16 +6,16 @@
 #include <godot_cpp/classes/image.hpp>
 #include <vector>
 
-using namespace godot;
+namespace godot {
 
 class DicomViewer : public Control {
     GDCLASS(DicomViewer, Control);
 
+private:
     TextureRect *texture_rect;
     Ref<ImageTexture> image_texture;
     Ref<Image> image_data;
 
-    // Raw pixel storage for fast window/level remapping (physical values)
     std::vector<double> raw_pixels;
     int raw_width;
     int raw_height;
@@ -25,42 +25,48 @@ class DicomViewer : public Control {
     float zoom;
     Vector2 pan;
     float pixel_aspect_ratio;
+    
+    String current_modality;
+    
+    // Store original DICOM VOI values
+    float original_window_width;
+    float original_window_center;
+    bool has_original_voi;
+    
+    void apply_window_level();
+    void update_texture();
 
 protected:
     static void _bind_methods();
 
 public:
     DicomViewer();
+    ~DicomViewer() {}
 
-    // Load a DICOM file (or a normal image if no DICOM library is available)
     bool load_dicom(const String &path);
-
-    // Simple pixel window/level adjustment (affects how we map pixel values to 8-bit)
     void set_window_level(float window, float level);
+    void set_window(float window) { window_width = window; apply_window_level(); update_texture(); }
+    void set_level(float level) { window_center = level; apply_window_level(); update_texture(); }
     float get_window() const { return window_width; }
     float get_level() const { return window_center; }
-    void set_window(float window) { set_window_level(window, window_center); }
-    void set_level(float level) { set_window_level(window_width, level); }
 
-    // Zoom / pan helpers
     void zoom_in();
     void zoom_out();
     void reset_view();
-
-    // Returns a dictionary of parsed metadata (if available)
-    Dictionary get_metadata() const;
-
-    // Utility to update the displayed texture from internal Image
-    void update_texture();
-
-    // Map raw pixels through window/level into the Image
-    void apply_window_level();
     
-    // Preset methods
+    Dictionary get_metadata() const;
+    float get_pixel_aspect_ratio() const { return pixel_aspect_ratio; }
+    String get_modality() const { return current_modality; }
+    
+    // Window/Level presets
     void apply_soft_tissue_preset();
     void apply_lung_preset();
     void apply_bone_preset();
-    
-    // Aspect ratio control
-    float get_pixel_aspect_ratio() const { return pixel_aspect_ratio; }
+    void apply_brain_preset();
+    void apply_t2_brain_preset();
+    void apply_mammography_preset();
+    void apply_auto_preset();
+    void apply_modality_preset();  // Auto-select based on modality
 };
+
+}

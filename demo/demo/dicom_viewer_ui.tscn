@@ -106,6 +106,11 @@ layout_mode = 2
 theme_override_font_sizes/font_size = 11
 text = "Aspect Ratio: 1:1 (square pixels)"
 
+[node name="ModalityLabel" type="Label" parent="HSplitContainer/VBoxContainer/ImageInfo"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 11
+text = "Modality: Unknown"
+
 [node name="HSeparator5" type="HSeparator" parent="HSplitContainer/VBoxContainer"]
 layout_mode = 2
 
@@ -147,6 +152,22 @@ text = "Lung (2)"
 [node name="BoneButton" type="Button" parent="HSplitContainer/VBoxContainer/WindowingPresets"]
 layout_mode = 2
 text = "Bone (3)"
+
+[node name="BrainT1Button" type="Button" parent="HSplitContainer/VBoxContainer/WindowingPresets"]
+layout_mode = 2
+text = "Brain T1 (4)"
+
+[node name="BrainT2Button" type="Button" parent="HSplitContainer/VBoxContainer/WindowingPresets"]
+layout_mode = 2
+text = "Brain T2 (5)"
+
+[node name="MammoButton" type="Button" parent="HSplitContainer/VBoxContainer/WindowingPresets"]
+layout_mode = 2
+text = "Mammography (6)"
+
+[node name="AutoButton" type="Button" parent="HSplitContainer/VBoxContainer/WindowingPresets"]
+layout_mode = 2
+text = "Auto (DICOM VOI) (0)"
 
 [node name="Label" type="Label" parent="HSplitContainer/VBoxContainer"]
 layout_mode = 2
@@ -207,6 +228,10 @@ file_mode = 2
 [connection signal="pressed" from="HSplitContainer/VBoxContainer/WindowingPresets/SoftTissueButton" to="." method="_on_soft_tissue_button_pressed"]
 [connection signal="pressed" from="HSplitContainer/VBoxContainer/WindowingPresets/LungButton" to="." method="_on_lung_button_pressed"]
 [connection signal="pressed" from="HSplitContainer/VBoxContainer/WindowingPresets/BoneButton" to="." method="_on_bone_button_pressed"]
+[connection signal="pressed" from="HSplitContainer/VBoxContainer/WindowingPresets/BrainT1Button" to="." method="_on_brain_button_pressed"]
+[connection signal="pressed" from="HSplitContainer/VBoxContainer/WindowingPresets/BrainT2Button" to="." method="_on_t2_brain_button_pressed"]
+[connection signal="pressed" from="HSplitContainer/VBoxContainer/WindowingPresets/MammoButton" to="." method="_on_mammo_button_pressed"]
+[connection signal="pressed" from="HSplitContainer/VBoxContainer/WindowingPresets/AutoButton" to="." method="_on_auto_button_pressed"]
 [connection signal="toggled" from="HSplitContainer/VBoxContainer/ZoomControls/ZoomModeButton" to="." method="_on_zoom_mode_button_toggled"]
 [connection signal="pressed" from="HSplitContainer/VBoxContainer/ZoomControls/ResetButton" to="." method="_on_reset_button_pressed"]
 [connection signal="pressed" from="HSplitContainer/VBoxContainer/BackToMenuButton" to="." method="_on_back_to_menu_button_pressed"]

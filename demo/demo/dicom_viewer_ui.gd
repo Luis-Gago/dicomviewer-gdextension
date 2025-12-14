@@ -12,6 +12,7 @@ extends Control
 @onready var file_index_label: Label = $HSplitContainer/VBoxContainer/FileInfo/FileIndexLabel
 @onready var status_label: Label = $HSplitContainer/VBoxContainer/StatusLabel
 @onready var aspect_ratio_label: Label = $HSplitContainer/VBoxContainer/ImageInfo/AspectRatioLabel
+@onready var modality_label: Label = $HSplitContainer/VBoxContainer/ImageInfo/ModalityLabel
 @onready var notes_text: TextEdit = $HSplitContainer/LeftPanel/BottomPanel/MarginContainer/VBoxContainer/TextEdit
 @onready var zoom_mode_button: Button = $HSplitContainer/VBoxContainer/ZoomControls/ZoomModeButton
 
@@ -164,18 +165,27 @@ func load_current_file() -> void:
     if success:
         status_label.text = "Loaded: " + path.get_file()
         
-        # Update aspect ratio display - simplified for performance
+        # Update aspect ratio display
         var aspect_ratio = dicom_viewer.get_pixel_aspect_ratio()
         if aspect_ratio == 1.0:
             aspect_ratio_label.text = "Aspect Ratio: 1:1"
         else:
             aspect_ratio_label.text = "Aspect Ratio: %.2f:1" % aspect_ratio
         
+        # Update modality display
+        var modality = dicom_viewer.get_modality()
+        if modality != "":
+            modality_label.text = "Modality: " + modality
+        else:
+            modality_label.text = "Modality: Unknown"
+        
         if is_zoomed_in:
             dicom_viewer.reset_view()
             is_zoomed_in = false
         
         if not user_adjusted_windowing:
+            # Use modality-specific preset
+            dicom_viewer.apply_modality_preset()
             window_slider.set_block_signals(true)
             level_slider.set_block_signals(true)
             window_slider.value = dicom_viewer.get_window()
@@ -294,6 +304,54 @@ func _on_bone_button_pressed() -> void:
     update_labels()
     status_label.text = "Applied Bone preset (W:1800 L:400)"
 
+func _on_brain_button_pressed() -> void:
+    user_adjusted_windowing = true
+    dicom_viewer.apply_brain_preset()
+    window_slider.set_block_signals(true)
+    level_slider.set_block_signals(true)
+    window_slider.value = dicom_viewer.get_window()
+    level_slider.value = dicom_viewer.get_level()
+    window_slider.set_block_signals(false)
+    level_slider.set_block_signals(false)
+    update_labels()
+    status_label.text = "Applied Brain T1 preset (W:80 L:40)"
+
+func _on_t2_brain_button_pressed() -> void:
+    user_adjusted_windowing = true
+    dicom_viewer.apply_t2_brain_preset()
+    window_slider.set_block_signals(true)
+    level_slider.set_block_signals(true)
+    window_slider.value = dicom_viewer.get_window()
+    level_slider.value = dicom_viewer.get_level()
+    window_slider.set_block_signals(false)
+    level_slider.set_block_signals(false)
+    update_labels()
+    status_label.text = "Applied Brain T2 preset (W:160 L:80)"
+
+func _on_mammo_button_pressed() -> void:
+    user_adjusted_windowing = true
+    dicom_viewer.apply_mammography_preset()
+    window_slider.set_block_signals(true)
+    level_slider.set_block_signals(true)
+    window_slider.value = dicom_viewer.get_window()
+    level_slider.value = dicom_viewer.get_level()
+    window_slider.set_block_signals(false)
+    level_slider.set_block_signals(false)
+    update_labels()
+    status_label.text = "Applied Mammography preset (W:4000 L:2000)"
+
+func _on_auto_button_pressed() -> void:
+    user_adjusted_windowing = false
+    dicom_viewer.apply_auto_preset()
+    window_slider.set_block_signals(true)
+    level_slider.set_block_signals(true)
+    window_slider.value = dicom_viewer.get_window()
+    level_slider.value = dicom_viewer.get_level()
+    window_slider.set_block_signals(false)
+    level_slider.set_block_signals(false)
+    update_labels()
+    status_label.text = "Applied Auto preset from DICOM metadata"
+
 func zoom_into_position(click_pos: Vector2, zoom_factor: float) -> void:
     if dicom_viewer.get_child_count() == 0:
         return
@@ -389,6 +447,15 @@ func _unhandled_input(event: InputEvent) -> void:
                 _on_lung_button_pressed()
             KEY_3:
                 _on_bone_button_pressed()
+            KEY_4:
+                _on_brain_button_pressed()
+            KEY_5:
+                _on_t2_brain_button_pressed()
+            KEY_6:
+                _on_mammo_button_pressed()
+            KEY_0:
+                _on_auto_button_pressed()
+
 
 func _on_back_to_menu_button_pressed() -> void:
     get_tree().change_scene_to_file("res://demo/main_menu.tscn")

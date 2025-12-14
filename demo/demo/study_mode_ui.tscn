@@ -64,6 +64,11 @@ layout_mode = 2
 text = "Aspect Ratio: 1:1 (square pixels)"
 theme_override_font_sizes/font_size = 10
 
+[node name="ModalityLabel" type="Label" parent="HSplitContainer/LeftPanel/VSplitContainer/TopSection/ImageInfo"]
+layout_mode = 2
+text = "Modality: Unknown"
+theme_override_font_sizes/font_size = 10
+
 [node name="WindowControls" type="VBoxContainer" parent="HSplitContainer/LeftPanel/VSplitContainer/TopSection"]
 layout_mode = 2
 
@@ -106,6 +111,28 @@ text = "Lung (2)"
 layout_mode = 2
 size_flags_horizontal = 3
 text = "Bone (3)"
+
+[node name="PresetControls2" type="HBoxContainer" parent="HSplitContainer/LeftPanel/VSplitContainer/TopSection"]
+layout_mode = 2
+
+[node name="BrainT1Button" type="Button" parent="HSplitContainer/LeftPanel/VSplitContainer/TopSection/PresetControls2"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Brain T1 (4)"
+
+[node name="BrainT2Button" type="Button" parent="HSplitContainer/LeftPanel/VSplitContainer/TopSection/PresetControls2"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Brain T2 (5)"
+
+[node name="MammoButton" type="Button" parent="HSplitContainer/LeftPanel/VSplitContainer/TopSection/PresetControls2"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Mammo (6)"
+
+[node name="AutoPresetButton" type="Button" parent="HSplitContainer/LeftPanel/VSplitContainer/TopSection"]
+layout_mode = 2
+text = "Auto Preset (0)"
 
 [node name="ViewControls" type="HBoxContainer" parent="HSplitContainer/LeftPanel/VSplitContainer/TopSection"]
 layout_mode = 2
@@ -219,6 +246,10 @@ text = "Back to Menu"
 [connection signal="pressed" from="HSplitContainer/LeftPanel/VSplitContainer/TopSection/PresetControls/SoftTissueButton" to="." method="_on_soft_tissue_button_pressed"]
 [connection signal="pressed" from="HSplitContainer/LeftPanel/VSplitContainer/TopSection/PresetControls/LungButton" to="." method="_on_lung_button_pressed"]
 [connection signal="pressed" from="HSplitContainer/LeftPanel/VSplitContainer/TopSection/PresetControls/BoneButton" to="." method="_on_bone_button_pressed"]
+[connection signal="pressed" from="HSplitContainer/LeftPanel/VSplitContainer/TopSection/PresetControls2/BrainT1Button" to="." method="_on_brain_button_pressed"]
+[connection signal="pressed" from="HSplitContainer/LeftPanel/VSplitContainer/TopSection/PresetControls2/BrainT2Button" to="." method="_on_t2_brain_button_pressed"]
+[connection signal="pressed" from="HSplitContainer/LeftPanel/VSplitContainer/TopSection/PresetControls2/MammoButton" to="." method="_on_mammo_button_pressed"]
+[connection signal="pressed" from="HSplitContainer/LeftPanel/VSplitContainer/TopSection/AutoPresetButton" to="." method="_on_auto_button_pressed"]
 [connection signal="toggled" from="HSplitContainer/LeftPanel/VSplitContainer/TopSection/ViewControls/ZoomModeButton" to="." method="_on_zoom_mode_button_toggled"]
 [connection signal="pressed" from="HSplitContainer/LeftPanel/VSplitContainer/TopSection/ViewControls/ResetViewButton" to="." method="_on_reset_button_pressed"]
 [connection signal="pressed" from="HSplitContainer/RightPanel/SubmitButton" to="." method="_on_submit_button_pressed"]
