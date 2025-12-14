@@ -13,6 +13,8 @@
 
 #include <godot_cpp/variant/packed_byte_array.hpp>
 #include <godot_cpp/variant/utility_functions.hpp>
+#include <godot_cpp/classes/os.hpp>
+#include <godot_cpp/classes/project_settings.hpp>
 
 using namespace godot;
 
@@ -99,11 +101,25 @@ bool DicomViewer::load_dicom(const String &path) {
     // Register decompression codecs first
     register_dcmtk_codecs();
     
+    // Convert Godot's user:// path to absolute filesystem path
+    String absolute_path = path;
+    if (path.begins_with("user://")) {
+        absolute_path = OS::get_singleton()->get_user_data_dir().path_join(path.substr(7));
+    } else if (path.begins_with("res://")) {
+        absolute_path = ProjectSettings::get_singleton()->globalize_path(path);
+    }
+    
+    #ifdef DEBUG_DICOM_LOADING
+    UtilityFunctions::print("Loading DICOM from virtual path: ", path);
+    UtilityFunctions::print("Resolved to absolute path: ", absolute_path);
+    #endif
+    
     // Load file and dataset
     DcmFileFormat file;
-    OFCondition loadStatus = file.loadFile(path.utf8().get_data());
+    OFCondition loadStatus = file.loadFile(absolute_path.utf8().get_data());
     if (!loadStatus.good()) {
-        UtilityFunctions::printerr("DCMTK Error loading file: ", loadStatus.text());
+        UtilityFunctions::push_error("Failed to load DICOM: ", path);
+        UtilityFunctions::push_error("DCMTK Error loading file: ", loadStatus.text());
         return false;
     }
     DcmDataset *ds = file.getDataset();
@@ -241,11 +257,12 @@ bool DicomViewer::load_dicom(const String &path) {
     #endif
 
     // Use DicomImage - with codecs registered, it should handle decompression
-    DicomImage dcm_image(path.utf8().get_data());
+    DicomImage dcm_image(absolute_path.utf8().get_data());
     
     EI_Status status = dcm_image.getStatus();
     if (status != EIS_Normal) {
-        UtilityFunctions::printerr("DCMTK DicomImage Error (status ", (int)status, "): ", 
+        UtilityFunctions::push_error("Failed to load DICOM: ", path);
+        UtilityFunctions::push_error("DCMTK DicomImage Error (status ", (int)status, "): ", 
                                   DicomImage::getString(status));
         return false;
     }

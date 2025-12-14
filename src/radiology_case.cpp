@@ -18,6 +18,9 @@ void RadiologyCase::_bind_methods() {
     
     ClassDB::bind_method(D_METHOD("has_explanation", "question_index"), &RadiologyCase::has_explanation);
     ClassDB::bind_method(D_METHOD("get_question_explanation", "question_index"), &RadiologyCase::get_question_explanation);
+    
+    ClassDB::bind_method(D_METHOD("to_dict"), &RadiologyCase::to_dict);
+    ClassDB::bind_method(D_METHOD("from_dict", "dict"), &RadiologyCase::from_dict);
 
     ADD_PROPERTY(PropertyInfo(Variant::STRING, "case_name"), "set_case_name", "get_case_name");
     ADD_PROPERTY(PropertyInfo(Variant::STRING, "case_description"), "set_case_description", "get_case_description");
@@ -104,4 +107,28 @@ Dictionary RadiologyCase::get_question_explanation(int p_question_index) const {
     }
     
     return question["explanation"];
+}
+
+Dictionary RadiologyCase::to_dict() const {
+    Dictionary dict;
+    dict["case_name"] = case_name;
+    dict["case_description"] = case_description;
+    dict["dicom_file_paths"] = dicom_file_paths;
+    dict["questions"] = questions;
+    return dict;
+}
+
+void RadiologyCase::from_dict(const Dictionary &p_dict) {
+    if (p_dict.has("case_name")) {
+        case_name = p_dict["case_name"];
+    }
+    if (p_dict.has("case_description")) {
+        case_description = p_dict["case_description"];
+    }
+    if (p_dict.has("dicom_file_paths")) {
+        dicom_file_paths = p_dict["dicom_file_paths"];
+    }
+    if (p_dict.has("questions")) {
+        questions = p_dict["questions"];
+    }
 }

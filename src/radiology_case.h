@@ -16,8 +16,8 @@ protected:
 private:
     String case_name;
     String case_description;
-    Array dicom_file_paths;  // Array of Strings
-    Array questions;  // Array of Dictionaries
+    Array dicom_file_paths;
+    Array questions;
 
 public:
     RadiologyCase();
@@ -36,7 +36,10 @@ public:
     Array get_questions() const;
     void set_questions(const Array &p_questions);
     
-    // Explanation methods
     bool has_explanation(int p_question_index) const;
     Dictionary get_question_explanation(int p_question_index) const;
+    
+    // Export/Import functionality
+    Dictionary to_dict() const;
+    void from_dict(const Dictionary &p_dict);
 };
