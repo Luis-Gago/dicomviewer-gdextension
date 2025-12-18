@@ -1,6 +1,6 @@
-[gd_scene load_steps=2 format=3 uid="uid://c8bbv36o6rc3t"]
+[gd_scene load_steps=2 format=3 uid="uid://cgyf71xxoxxu1"]
 
-[ext_resource type="Script" uid="uid://mex4nwa5rcm2" path="res://demo/dicom_viewer_ui.gd" id="1_6arit"]
+[ext_resource type="Script" path="res://demo/dicom_viewer_ui.gd" id="1_6arit"]
 
 [node name="DicomViewerUI" type="Control"]
 layout_mode = 3

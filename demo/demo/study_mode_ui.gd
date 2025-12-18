@@ -22,8 +22,9 @@ extends Control
 @onready var aspect_ratio_label: Label = $HSplitContainer/LeftPanel/VSplitContainer/TopSection/ImageInfo/AspectRatioLabel
 @onready var modality_label: Label = $HSplitContainer/LeftPanel/VSplitContainer/TopSection/ImageInfo/ModalityLabel
 @onready var zoom_mode_button: Button = $HSplitContainer/LeftPanel/VSplitContainer/TopSection/ViewControls/ZoomModeButton
+@onready var arrow_annotation_button: Button = $HSplitContainer/LeftPanel/VSplitContainer/TopSection/ViewControls/ArrowAnnotationButton
+@onready var circle_annotation_button: Button = $HSplitContainer/LeftPanel/VSplitContainer/TopSection/ViewControls/CircleAnnotationButton
 @onready var reset_view_button: Button = $HSplitContainer/LeftPanel/VSplitContainer/TopSection/ViewControls/ResetViewButton
-@onready var notes_text: TextEdit = $HSplitContainer/LeftPanel/VSplitContainer/NotesPanel/NotesEdit
 
 # Case data
 var case_path: String = ""
@@ -50,6 +51,19 @@ var user_adjusted_windowing: bool = false
 var pan_gesture_accumulator: float = 0.0
 var pan_gesture_threshold: float = 1.0
 
+# Annotation state
+var annotation_mode_active: bool = false
+var annotation_type: String = ""  # "arrow" or "circle"
+var is_drawing_arrow: bool = false
+var arrow_start_pos: Vector2 = Vector2.ZERO
+var arrow_end_pos: Vector2 = Vector2.ZERO
+var is_drawing_circle: bool = false
+var circle_center_pos: Vector2 = Vector2.ZERO
+var circle_radius: float = 0.0
+var annotations_per_image: Dictionary = {}  # key: image_index, value: Array of annotation dictionaries
+var selected_annotation_index: int = -1
+var annotation_overlay: Control
+
 # Performance optimization
 var is_loading: bool = false
 var pending_image_index: int = -1
@@ -62,6 +76,7 @@ func _ready() -> void:
     mc_button_group = ButtonGroup.new()
     
     setup_dicom_controls()
+    setup_annotation_overlay()
     
     # Hide explanation container initially
     explanation_container.visible = false
@@ -89,12 +104,24 @@ func setup_dicom_controls() -> void:
         level_slider.value_changed.connect(_on_level_slider_value_changed)
     if not zoom_mode_button.toggled.is_connected(_on_zoom_mode_button_toggled):
         zoom_mode_button.toggled.connect(_on_zoom_mode_button_toggled)
+    if not arrow_annotation_button.toggled.is_connected(_on_arrow_annotation_button_toggled):
+        arrow_annotation_button.toggled.connect(_on_arrow_annotation_button_toggled)
+    if not circle_annotation_button.toggled.is_connected(_on_circle_annotation_button_toggled):
+        circle_annotation_button.toggled.connect(_on_circle_annotation_button_toggled)
     if not reset_view_button.pressed.is_connected(_on_reset_button_pressed):
         reset_view_button.pressed.connect(_on_reset_button_pressed)
     if not dicom_viewer.gui_input.is_connected(_on_dicom_viewer_gui_input):
         dicom_viewer.gui_input.connect(_on_dicom_viewer_gui_input)
     
     update_windowing_labels()
+
+func setup_annotation_overlay() -> void:
+    # Create a transparent overlay on top of the DICOM viewer for drawing annotations
+    annotation_overlay = Control.new()
+    annotation_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+    annotation_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+    dicom_viewer.add_child(annotation_overlay)
+    annotation_overlay.draw.connect(_on_annotation_overlay_draw)
 
 func load_case(path: String) -> void:
     current_case = ResourceLoader.load(path) as RadiologyCase
@@ -142,6 +169,11 @@ func load_current_image() -> void:
             if is_zoomed_in:
                 dicom_viewer.reset_view()
                 is_zoomed_in = false
+            
+            # Redraw annotations for new image
+            selected_annotation_index = -1
+            if annotation_overlay:
+                annotation_overlay.queue_redraw()
             
             if not user_adjusted_windowing:
                 # Use modality-specific preset
@@ -390,6 +422,11 @@ func _on_level_slider_value_changed(value: float) -> void:
 func _on_zoom_mode_button_toggled(button_pressed: bool) -> void:
     zoom_mode_active = button_pressed
     if button_pressed:
+        # Disable annotation modes
+        annotation_mode_active = false
+        annotation_type = ""
+        arrow_annotation_button.button_pressed = false
+        circle_annotation_button.button_pressed = false
         dicom_viewer.mouse_default_cursor_shape = Control.CURSOR_CROSS
     else:
         dicom_viewer.mouse_default_cursor_shape = Control.CURSOR_ARROW
@@ -491,6 +528,56 @@ func zoom_into_position(click_pos: Vector2, zoom_factor: float) -> void:
     var new_position = click_pos - (texture_point * zoom_factor)
     texture_rect.position = new_position
 
+func _on_annotation_overlay_draw() -> void:
+    if not annotation_overlay:
+        return
+    
+    # Draw annotations for current image
+    var annotations = annotations_per_image.get(current_image_index, [])
+    for i in range(annotations.size()):
+        var annotation = annotations[i]
+        var color = Color.YELLOW if i == selected_annotation_index else Color.RED
+        
+        if annotation["type"] == "arrow":
+            draw_arrow(annotation_overlay, annotation["start"], annotation["end"], color, 3.0)
+        elif annotation["type"] == "circle":
+            draw_circle_annotation(annotation_overlay, annotation["center"], annotation["radius"], color, 3.0)
+    
+    # Draw annotation being created
+    if is_drawing_arrow:
+        draw_arrow(annotation_overlay, arrow_start_pos, arrow_end_pos, Color.GREEN, 2.0)
+    elif is_drawing_circle:
+        draw_circle_annotation(annotation_overlay, circle_center_pos, circle_radius, Color.GREEN, 2.0)
+
+func draw_arrow(canvas: Control, start: Vector2, end: Vector2, color: Color, width: float) -> void:
+    # Draw line
+    canvas.draw_line(start, end, color, width)
+    
+    # Draw arrowhead
+    var direction = (end - start).normalized()
+    var arrow_size = 20.0
+    var arrow_angle = PI / 6.0  # 30 degrees
+    
+    var left_point = end - direction.rotated(arrow_angle) * arrow_size
+    var right_point = end - direction.rotated(-arrow_angle) * arrow_size
+    
+    canvas.draw_line(end, left_point, color, width)
+    canvas.draw_line(end, right_point, color, width)
+
+func draw_circle_annotation(canvas: Control, center: Vector2, radius: float, color: Color, width: float) -> void:
+    # Draw circle outline
+    var num_segments = 64
+    var angle_step = 2.0 * PI / num_segments
+    
+    for i in range(num_segments):
+        var angle1 = i * angle_step
+        var angle2 = (i + 1) * angle_step
+        
+        var point1 = center + Vector2(cos(angle1), sin(angle1)) * radius
+        var point2 = center + Vector2(cos(angle2), sin(angle2)) * radius
+        
+        canvas.draw_line(point1, point2, color, width)
+
 func _on_dicom_viewer_gui_input(event: InputEvent) -> void:
     if event is InputEventPanGesture:
         var pg = event as InputEventPanGesture
@@ -503,6 +590,60 @@ func _on_dicom_viewer_gui_input(event: InputEvent) -> void:
             _on_next_image_button_pressed()
             pan_gesture_accumulator = 0.0
         return
+    
+    # Handle annotation mode input
+    if annotation_mode_active and event is InputEventMouseButton:
+        var mb = event as InputEventMouseButton
+        
+        # Right-click to delete selected annotation
+        if mb.button_index == MOUSE_BUTTON_RIGHT and mb.pressed:
+            if selected_annotation_index >= 0:
+                delete_selected_annotation()
+                get_viewport().set_input_as_handled()
+                return
+            else:
+                # Try to select an annotation
+                select_annotation_at_position(mb.position)
+                get_viewport().set_input_as_handled()
+                return
+        
+        # Left-click to draw annotation
+        if mb.button_index == MOUSE_BUTTON_LEFT:
+            if mb.pressed:
+                if annotation_type == "arrow":
+                    is_drawing_arrow = true
+                    arrow_start_pos = mb.position
+                    arrow_end_pos = mb.position
+                elif annotation_type == "circle":
+                    is_drawing_circle = true
+                    circle_center_pos = mb.position
+                    circle_radius = 0.0
+                selected_annotation_index = -1  # Deselect when starting new annotation
+            else:
+                if is_drawing_arrow:
+                    # Finish drawing arrow
+                    add_arrow_to_current_image(arrow_start_pos, arrow_end_pos)
+                    is_drawing_arrow = false
+                elif is_drawing_circle:
+                    # Finish drawing circle
+                    add_circle_to_current_image(circle_center_pos, circle_radius)
+                    is_drawing_circle = false
+            annotation_overlay.queue_redraw()
+            get_viewport().set_input_as_handled()
+            return
+    
+    if annotation_mode_active and event is InputEventMouseMotion:
+        var mm = event as InputEventMouseMotion
+        if is_drawing_arrow:
+            arrow_end_pos = mm.position
+            annotation_overlay.queue_redraw()
+            get_viewport().set_input_as_handled()
+            return
+        elif is_drawing_circle:
+            circle_radius = circle_center_pos.distance_to(mm.position)
+            annotation_overlay.queue_redraw()
+            get_viewport().set_input_as_handled()
+            return
     
     if event is InputEventMouseButton:
         var mb = event as InputEventMouseButton
@@ -550,6 +691,122 @@ func _on_dicom_viewer_gui_input(event: InputEvent) -> void:
         window_slider.value = clamp(new_window, window_slider.min_value, window_slider.max_value)
         level_slider.value = clamp(new_level, level_slider.min_value, level_slider.max_value)
 
+func add_arrow_to_current_image(start: Vector2, end: Vector2) -> void:
+    # Only add if arrow has meaningful length
+    if start.distance_to(end) < 10.0:
+        return
+    
+    if not annotations_per_image.has(current_image_index):
+        annotations_per_image[current_image_index] = []
+    
+    annotations_per_image[current_image_index].append({
+        "type": "arrow",
+        "start": start,
+        "end": end
+    })
+    annotation_overlay.queue_redraw()
+
+func add_circle_to_current_image(center: Vector2, radius: float) -> void:
+    # Only add if circle has meaningful radius
+    if radius < 10.0:
+        return
+    
+    if not annotations_per_image.has(current_image_index):
+        annotations_per_image[current_image_index] = []
+    
+    annotations_per_image[current_image_index].append({
+        "type": "circle",
+        "center": center,
+        "radius": radius
+    })
+    annotation_overlay.queue_redraw()
+
+func select_annotation_at_position(pos: Vector2) -> void:
+    var annotations = annotations_per_image.get(current_image_index, [])
+    var selection_threshold = 15.0
+    
+    for i in range(annotations.size()):
+        var annotation = annotations[i]
+        var is_near = false
+        
+        if annotation["type"] == "arrow":
+            # Check if click is near the arrow line
+            is_near = point_to_line_distance(pos, annotation["start"], annotation["end"]) < selection_threshold
+        elif annotation["type"] == "circle":
+            # Check if click is near the circle outline
+            var distance_from_center = pos.distance_to(annotation["center"])
+            is_near = abs(distance_from_center - annotation["radius"]) < selection_threshold
+        
+        if is_near:
+            selected_annotation_index = i
+            annotation_overlay.queue_redraw()
+            return
+    
+    # No annotation selected
+    if selected_annotation_index >= 0:
+        selected_annotation_index = -1
+        annotation_overlay.queue_redraw()
+
+func point_to_line_distance(point: Vector2, line_start: Vector2, line_end: Vector2) -> float:
+    var line_vec = line_end - line_start
+    var point_vec = point - line_start
+    var line_len = line_vec.length()
+    
+    if line_len == 0:
+        return point.distance_to(line_start)
+    
+    var t = clamp(point_vec.dot(line_vec) / (line_len * line_len), 0.0, 1.0)
+    var projection = line_start + t * line_vec
+    return point.distance_to(projection)
+
+func delete_selected_annotation() -> void:
+    if selected_annotation_index < 0:
+        return
+    
+    var annotations = annotations_per_image.get(current_image_index, [])
+    if selected_annotation_index < annotations.size():
+        annotations.remove_at(selected_annotation_index)
+        selected_annotation_index = -1
+        annotation_overlay.queue_redraw()
+
+func _on_arrow_annotation_button_toggled(button_pressed: bool) -> void:
+    if button_pressed:
+        annotation_mode_active = true
+        annotation_type = "arrow"
+        # Disable other modes
+        zoom_mode_active = false
+        zoom_mode_button.button_pressed = false
+        circle_annotation_button.button_pressed = false
+        dicom_viewer.mouse_default_cursor_shape = Control.CURSOR_CROSS
+    else:
+        if not circle_annotation_button.button_pressed:
+            annotation_mode_active = false
+            annotation_type = ""
+            # Cancel drawing if in progress
+            is_drawing_arrow = false
+            selected_annotation_index = -1
+            annotation_overlay.queue_redraw()
+            dicom_viewer.mouse_default_cursor_shape = Control.CURSOR_ARROW
+
+func _on_circle_annotation_button_toggled(button_pressed: bool) -> void:
+    if button_pressed:
+        annotation_mode_active = true
+        annotation_type = "circle"
+        # Disable other modes
+        zoom_mode_active = false
+        zoom_mode_button.button_pressed = false
+        arrow_annotation_button.button_pressed = false
+        dicom_viewer.mouse_default_cursor_shape = Control.CURSOR_CROSS
+    else:
+        if not arrow_annotation_button.button_pressed:
+            annotation_mode_active = false
+            annotation_type = ""
+            # Cancel drawing if in progress
+            is_drawing_circle = false
+            selected_annotation_index = -1
+            annotation_overlay.queue_redraw()
+            dicom_viewer.mouse_default_cursor_shape = Control.CURSOR_ARROW
+
 func _unhandled_input(event: InputEvent) -> void:
     if event is InputEventKey and event.pressed:
         match event.keycode:
@@ -561,6 +818,13 @@ func _unhandled_input(event: InputEvent) -> void:
                 _on_reset_button_pressed()
             KEY_Z:
                 zoom_mode_button.button_pressed = not zoom_mode_button.button_pressed
+            KEY_A:
+                arrow_annotation_button.button_pressed = not arrow_annotation_button.button_pressed
+            KEY_C:
+                circle_annotation_button.button_pressed = not circle_annotation_button.button_pressed
+            KEY_DELETE, KEY_BACKSPACE:
+                if annotation_mode_active:
+                    delete_selected_annotation()
             KEY_1:
                 _on_soft_tissue_button_pressed()
             KEY_2:

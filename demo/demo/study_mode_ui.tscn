@@ -143,25 +143,22 @@ size_flags_horizontal = 3
 toggle_mode = true
 text = "Zoom Mode (Z)"
 
+[node name="ArrowAnnotationButton" type="Button" parent="HSplitContainer/LeftPanel/VSplitContainer/TopSection/ViewControls"]
+layout_mode = 2
+size_flags_horizontal = 3
+toggle_mode = true
+text = "Arrow (A)"
+
+[node name="CircleAnnotationButton" type="Button" parent="HSplitContainer/LeftPanel/VSplitContainer/TopSection/ViewControls"]
+layout_mode = 2
+size_flags_horizontal = 3
+toggle_mode = true
+text = "Circle (C)"
+
 [node name="ResetViewButton" type="Button" parent="HSplitContainer/LeftPanel/VSplitContainer/TopSection/ViewControls"]
 layout_mode = 2
 size_flags_horizontal = 3
 text = "Reset View (R)"
-
-[node name="NotesPanel" type="VBoxContainer" parent="HSplitContainer/LeftPanel/VSplitContainer"]
-custom_minimum_size = Vector2(0, 100)
-layout_mode = 2
-size_flags_vertical = 3
-
-[node name="NotesLabel" type="Label" parent="HSplitContainer/LeftPanel/VSplitContainer/NotesPanel"]
-layout_mode = 2
-text = "Notes:"
-
-[node name="NotesEdit" type="TextEdit" parent="HSplitContainer/LeftPanel/VSplitContainer/NotesPanel"]
-custom_minimum_size = Vector2(0, 100)
-layout_mode = 2
-size_flags_vertical = 3
-placeholder_text = "Take notes here..."
 
 [node name="RightPanel" type="VBoxContainer" parent="HSplitContainer"]
 custom_minimum_size = Vector2(400, 0)
@@ -251,6 +248,8 @@ text = "Back to Menu"
 [connection signal="pressed" from="HSplitContainer/LeftPanel/VSplitContainer/TopSection/PresetControls2/MammoButton" to="." method="_on_mammo_button_pressed"]
 [connection signal="pressed" from="HSplitContainer/LeftPanel/VSplitContainer/TopSection/AutoPresetButton" to="." method="_on_auto_button_pressed"]
 [connection signal="toggled" from="HSplitContainer/LeftPanel/VSplitContainer/TopSection/ViewControls/ZoomModeButton" to="." method="_on_zoom_mode_button_toggled"]
+[connection signal="toggled" from="HSplitContainer/LeftPanel/VSplitContainer/TopSection/ViewControls/ArrowAnnotationButton" to="." method="_on_arrow_annotation_button_toggled"]
+[connection signal="toggled" from="HSplitContainer/LeftPanel/VSplitContainer/TopSection/ViewControls/CircleAnnotationButton" to="." method="_on_circle_annotation_button_toggled"]
 [connection signal="pressed" from="HSplitContainer/LeftPanel/VSplitContainer/TopSection/ViewControls/ResetViewButton" to="." method="_on_reset_button_pressed"]
 [connection signal="pressed" from="HSplitContainer/RightPanel/SubmitButton" to="." method="_on_submit_button_pressed"]
 [connection signal="pressed" from="HSplitContainer/RightPanel/NextQuestionButton" to="." method="_on_next_question_button_pressed"]
