@@ -38,6 +38,9 @@ var user_answers: Array = []
 var mc_button_group: ButtonGroup
 var mc_buttons: Array = []
 
+# Systematic review state
+var systematic_review_controls: Array = []  # Array of dictionaries with organ_system, button_group, buttons
+
 # DICOM viewer state
 var is_dragging: bool = false
 var drag_start_pos: Vector2
@@ -227,6 +230,12 @@ func display_current_question() -> void:
         btn.queue_free()
     mc_buttons.clear()
     
+    # Clear systematic review controls
+    for control_dict in systematic_review_controls:
+        for btn in control_dict.get("buttons", []):
+            btn.queue_free()
+    systematic_review_controls.clear()
+    
     # Hide explanation container
     explanation_container.visible = false
     clear_explanation()
@@ -234,6 +243,8 @@ func display_current_question() -> void:
     # Setup answer UI based on question type
     if question_type == "multiple_choice":
         setup_multiple_choice_ui(question_dict)
+    elif question_type == "systematic_review":
+        setup_systematic_review_ui(question_dict)
     else:
         setup_free_text_ui()
     
@@ -256,6 +267,89 @@ func setup_multiple_choice_ui(question_dict: Dictionary) -> void:
         radio_button.button_group = mc_button_group
         answer_container.add_child(radio_button)
         mc_buttons.append(radio_button)
+
+func get_finding_display_text(finding_type: String) -> String:
+    match finding_type:
+        "no-finding":
+            return "No Finding"
+        "benign":
+            return "Benign Finding"
+        "pathological":
+            return "Pathological Finding"
+        _:
+            return "Unknown"
+
+func setup_systematic_review_ui(question_dict: Dictionary) -> void:
+    var organ_systems_findings = question_dict.get("organ_systems_findings", [])
+    
+    if organ_systems_findings.size() == 0:
+        var error_label = Label.new()
+        error_label.text = "No organ systems defined for this systematic review."
+        answer_container.add_child(error_label)
+        return
+    
+    # Title
+    var title_label = Label.new()
+    title_label.text = "Select findings for each organ system:"
+    title_label.add_theme_font_size_override("font_size", 14)
+    answer_container.add_child(title_label)
+    
+    var separator = HSeparator.new()
+    answer_container.add_child(separator)
+    
+    # Create controls for each organ system
+    for organ_finding in organ_systems_findings:
+        var organ_name = organ_finding.get("organ_system", "Unknown")
+        
+        # Create panel for this organ system
+        var panel = PanelContainer.new()
+        var vbox = VBoxContainer.new()
+        panel.add_child(vbox)
+        
+        # Organ system label
+        var organ_label = Label.new()
+        organ_label.text = organ_name
+        organ_label.add_theme_font_size_override("font_size", 13)
+        vbox.add_child(organ_label)
+        
+        # Button group for this organ system
+        var button_group = ButtonGroup.new()
+        var buttons = []
+        
+        # Create radio buttons for finding types
+        var findings_hbox = HBoxContainer.new()
+        vbox.add_child(findings_hbox)
+        
+        # No Finding
+        var no_finding_btn = CheckBox.new()
+        no_finding_btn.text = "No Finding"
+        no_finding_btn.button_group = button_group
+        findings_hbox.add_child(no_finding_btn)
+        buttons.append(no_finding_btn)
+        
+        # Benign Finding
+        var benign_btn = CheckBox.new()
+        benign_btn.text = "Benign Finding"
+        benign_btn.button_group = button_group
+        findings_hbox.add_child(benign_btn)
+        buttons.append(benign_btn)
+        
+        # Pathological Finding
+        var pathological_btn = CheckBox.new()
+        pathological_btn.text = "Pathological Finding"
+        pathological_btn.button_group = button_group
+        findings_hbox.add_child(pathological_btn)
+        buttons.append(pathological_btn)
+        
+        answer_container.add_child(panel)
+        
+        # Store control information
+        systematic_review_controls.append({
+            "organ_system": organ_name,
+            "button_group": button_group,
+            "buttons": buttons,
+            "expected_finding": organ_finding.get("finding_type", "no-finding")
+        })
 
 func update_progress() -> void:
     var total = current_case.get_questions().size()
@@ -303,6 +397,60 @@ func _on_submit_button_pressed() -> void:
             feedback_label.text = "✓ Correct!"
         else:
             feedback_label.text = "✗ Incorrect\n\nCorrect Answer: %s" % expected_answer
+    elif question_type == "systematic_review":
+        # Check if all organ systems have been reviewed
+        var all_answered = true
+        for control_dict in systematic_review_controls:
+            var button_group = control_dict["button_group"] as ButtonGroup
+            if button_group.get_pressed_button() == null:
+                all_answered = false
+                break
+        
+        if not all_answered:
+            feedback_label.text = "Please review all organ systems"
+            return
+        
+        # Grade systematic review
+        var correct_count = 0
+        var total_count = systematic_review_controls.size()
+        var user_findings = []
+        var expected_findings_text = ""
+        var feedback_text = "Systematic Review Results:\n\n"
+        
+        for control_dict in systematic_review_controls:
+            var organ_name = control_dict["organ_system"]
+            var expected_finding = control_dict["expected_finding"]
+            var buttons = control_dict["buttons"]
+            
+            var user_finding = ""
+            if buttons[0].button_pressed:
+                user_finding = "no-finding"
+            elif buttons[1].button_pressed:
+                user_finding = "benign"
+            elif buttons[2].button_pressed:
+                user_finding = "pathological"
+            
+            var is_organ_correct = user_finding == expected_finding
+            if is_organ_correct:
+                correct_count += 1
+                feedback_text += "✓ %s: Correct\n" % organ_name
+            else:
+                var expected_text = get_finding_display_text(expected_finding)
+                feedback_text += "✗ %s: Incorrect (Expected: %s)\n" % [organ_name, expected_text]
+            
+            user_findings.append({
+                "organ_system": organ_name,
+                "finding": user_finding
+            })
+            
+            expected_findings_text += "%s: %s\n" % [organ_name, get_finding_display_text(expected_finding)]
+        
+        is_correct = correct_count == total_count
+        user_answer = JSON.stringify(user_findings)
+        expected_answer = expected_findings_text
+        
+        feedback_text += "\nScore: %d / %d (%.1f%%)" % [correct_count, total_count, (float(correct_count) / total_count) * 100.0]
+        feedback_label.text = feedback_text
     else:
         user_answer = answer_edit.text.strip_edges()
         expected_answer = current_question.get("expected_answer", "")
@@ -313,7 +461,7 @@ func _on_submit_button_pressed() -> void:
         "user_answer": user_answer,
         "expected_answer": expected_answer,
         "type": question_type,
-        "is_correct": is_correct if question_type == "multiple_choice" else null
+        "is_correct": is_correct if question_type in ["multiple_choice", "systematic_review"] else null
     })
     
     # Show explanation if available
@@ -854,24 +1002,39 @@ func show_completion() -> void:
     var summary = "Review Summary:\n\n"
     var mc_score = 0
     var mc_total = 0
+    var sr_score = 0
+    var sr_total = 0
     
     for i in range(user_answers.size()):
         var answer_data = user_answers[i]
         summary += "Q%d: %s\n" % [i + 1, answer_data["question"]]
-        summary += "Your Answer: %s\n" % answer_data["user_answer"]
         
-        if answer_data["type"] == "multiple_choice":
-            mc_total += 1
+        if answer_data["type"] == "systematic_review":
+            sr_total += 1
             if answer_data.get("is_correct", false):
-                summary += "✓ Correct!\n\n"
-                mc_score += 1
+                summary += "✓ All findings correct\n\n"
+                sr_score += 1
             else:
-                summary += "✗ Incorrect - Correct Answer: %s\n\n" % answer_data["expected_answer"]
+                summary += "Partially correct - See details above\n"
+                summary += "Expected:\n%s\n" % answer_data["expected_answer"]
         else:
-            summary += "Expected: %s\n\n" % answer_data["expected_answer"]
+            summary += "Your Answer: %s\n" % answer_data["user_answer"]
+            
+            if answer_data["type"] == "multiple_choice":
+                mc_total += 1
+                if answer_data.get("is_correct", false):
+                    summary += "✓ Correct!\n\n"
+                    mc_score += 1
+                else:
+                    summary += "✗ Incorrect - Correct Answer: %s\n\n" % answer_data["expected_answer"]
+            else:
+                summary += "Expected: %s\n\n" % answer_data["expected_answer"]
     
     if mc_total > 0:
         summary += "\nMultiple Choice Score: %d / %d (%.1f%%)" % [mc_score, mc_total, (float(mc_score) / mc_total) * 100.0]
+    
+    if sr_total > 0:
+        summary += "\nSystematic Review Score: %d / %d (%.1f%%)" % [sr_score, sr_total, (float(sr_score) / sr_total) * 100.0]
     
     feedback_label.text = summary
 
