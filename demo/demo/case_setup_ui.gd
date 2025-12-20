@@ -9,6 +9,20 @@ extends Control
 @onready var title_label: Label = $MarginContainer/VBoxContainer/Title
 
 var explanation_image_dialog: FileDialog
+var annotation_editor_popup: Window
+var annotation_viewer: DicomViewer
+var annotation_overlay: Control
+var annotation_current_image_index: int = 0
+var annotation_mode: String = ""  # "arrow" or "circle"
+var is_drawing_annotation: bool = false
+var temp_annotation_start: Vector2 = Vector2.ZERO
+var temp_annotation_end: Vector2 = Vector2.ZERO
+var temp_circle_center: Vector2 = Vector2.ZERO
+var temp_circle_radius: float = 0.0
+var current_annotation_panel: PanelContainer = null
+var pan_gesture_accumulator: float = 0.0
+var pan_gesture_threshold: float = 1.0
+
 var current_case: RadiologyCase
 var dicom_files: PackedStringArray = []
 var is_editing: bool = false
@@ -92,6 +106,8 @@ func populate_question_panel(panel: PanelContainer, question_dict: Dictionary) -
 			type_dropdown.selected = 1
 		"systematic_review":
 			type_dropdown.selected = 2
+		"mark_target":
+			type_dropdown.selected = 3
 	
 	# Set question text
 	var question_edit = vbox.get_child(5) as LineEdit
@@ -132,12 +148,38 @@ func populate_question_panel(panel: PanelContainer, question_dict: Dictionary) -
 			var organ_name = finding_dict.get("organ_system", "")
 			var finding_type = finding_dict.get("finding_type", "no-finding")
 			_add_organ_system_item(systems_list, organ_name, finding_type)
+	elif question_type == "mark_target":
+		# Trigger the visibility change for mark target
+		type_dropdown.item_selected.emit(3)
+		
+		var target_container = vbox.get_child(10) as VBoxContainer
+		
+		if target_container == null:
+			push_error("Target container not found at index 10. VBox has %d children." % vbox.get_child_count())
+			return
+		
+		# Set target annotation data if exists
+		if question_dict.has("target_annotation"):
+			panel.set_meta("target_annotation", question_dict["target_annotation"])
+			var target_status = target_container.get_child(3) as Label
+			if target_status:
+				var annotation_type = question_dict["target_annotation"].get("type", "unknown")
+				target_status.text = "✓ Target area set (%s)" % annotation_type
+				target_status.add_theme_color_override("font_color", Color.GREEN)
+		
+		# Set tolerance
+		var tolerance = question_dict.get("tolerance", 50.0)
+		var tolerance_slider = target_container.get_child(7) as HSlider
+		if tolerance_slider:
+			tolerance_slider.value = tolerance
+		else:
+			push_error("Tolerance slider not found at index 7. Target container has %d children." % target_container.get_child_count())
 	
 	# Set image index
 	var image_ref_spin = vbox.get_child(11) as SpinBox
 	image_ref_spin.value = question_dict.get("image_index", 0)
 	
-	# Set explanation text - UPDATED: Handle both old and new format
+	# Set explanation text
 	var explanation_container = vbox.get_child(12) as VBoxContainer
 	var explanation_edit = explanation_container.get_child(1) as TextEdit
 	
@@ -277,6 +319,7 @@ func create_question_panel() -> PanelContainer:
 	type_dropdown.add_item("Free Text")
 	type_dropdown.add_item("Multiple Choice")
 	type_dropdown.add_item("Systematic Review")
+	type_dropdown.add_item("Mark Target Area")
 	type_dropdown.selected = 0
 	vbox.add_child(type_dropdown)
 	
@@ -344,6 +387,61 @@ func create_question_panel() -> PanelContainer:
 	add_system_btn.pressed.connect(func(): _add_organ_system_item(systems_list_container))
 	systematic_container.add_child(add_system_btn)
 	
+	# Target Area container (initially hidden) - NEW
+	var target_area_container = VBoxContainer.new()
+	target_area_container.visible = false
+	vbox.add_child(target_area_container)
+	
+	var target_area_label = Label.new()
+	target_area_label.text = "Target Area Annotation:"
+	target_area_container.add_child(target_area_label)
+	
+	var target_instruction = Label.new()
+	target_instruction.text = "Instructions:\n1. Ensure DICOM files are loaded\n2. Click 'Open Annotation Editor' to view images and draw annotation\n3. Draw a circle or arrow on the target area\n4. Click 'Save Annotation' to capture it"
+	target_instruction.add_theme_font_size_override("font_size", 10)
+	target_area_container.add_child(target_instruction)
+	
+	var set_target_btn = Button.new()
+	set_target_btn.text = "Open Annotation Editor"
+	set_target_btn.pressed.connect(func(): _open_annotation_editor(panel))
+	target_area_container.add_child(set_target_btn)
+	
+	var target_status = Label.new()
+	target_status.text = "No target area set - Please use annotation tools"
+	target_status.add_theme_color_override("font_color", Color.ORANGE)
+	target_area_container.add_child(target_status)
+	
+	# Manual entry option
+	var manual_label = Label.new()
+	manual_label.text = "Or enter annotation data manually:"
+	manual_label.add_theme_font_size_override("font_size", 10)
+	target_area_container.add_child(manual_label)
+	
+	var annotation_type_dropdown = OptionButton.new()
+	annotation_type_dropdown.add_item("Circle")
+	annotation_type_dropdown.add_item("Arrow")
+	target_area_container.add_child(annotation_type_dropdown)
+	
+	# Tolerance slider
+	var tolerance_label = Label.new()
+	tolerance_label.text = "Acceptance Tolerance (pixels):"
+	target_area_container.add_child(tolerance_label)
+	
+	var tolerance_slider = HSlider.new()
+	tolerance_slider.min_value = 10.0
+	tolerance_slider.max_value = 200.0
+	tolerance_slider.value = 50.0
+	tolerance_slider.step = 5.0
+	target_area_container.add_child(tolerance_slider)
+	
+	var tolerance_value_label = Label.new()
+	tolerance_value_label.text = "50 pixels"
+	target_area_container.add_child(tolerance_value_label)
+	
+	tolerance_slider.value_changed.connect(func(value: float):
+		tolerance_value_label.text = "%.0f pixels" % value
+	)
+	
 	# Image index
 	var image_ref_label = Label.new()
 	image_ref_label.text = "Reference Image Index (optional):"
@@ -393,14 +491,317 @@ func create_question_panel() -> PanelContainer:
 		var is_free_text = index == 0
 		var is_multiple_choice = index == 1
 		var is_systematic_review = index == 2
+		var is_target_area = index == 3
 		
 		answer_label.visible = is_free_text
 		answer_edit.visible = is_free_text
 		mc_container.visible = is_multiple_choice
 		systematic_container.visible = is_systematic_review
+		target_area_container.visible = is_target_area
 	)
 	
 	return panel
+
+func _open_annotation_editor(panel: PanelContainer) -> void:
+	if dicom_files.size() == 0:
+		var vbox = panel.get_child(0) as VBoxContainer
+		var target_area_container = vbox.get_child(10) as VBoxContainer
+		var target_status = target_area_container.get_child(3) as Label
+		target_status.text = "⚠ Please load DICOM files first"
+		target_status.add_theme_color_override("font_color", Color.RED)
+		return
+	
+	current_annotation_panel = panel
+	annotation_current_image_index = 0
+	annotation_mode = ""
+	is_drawing_annotation = false
+	
+	# Create annotation editor popup if it doesn't exist
+	if annotation_editor_popup == null:
+		_create_annotation_editor_popup()
+	
+	# Load first DICOM image
+	_load_annotation_image(0)
+	
+	# Show popup
+	annotation_editor_popup.popup_centered(Vector2i(1200, 800))
+
+func _create_annotation_editor_popup() -> void:
+	annotation_editor_popup = Window.new()
+	annotation_editor_popup.title = "Annotation Editor"
+	annotation_editor_popup.size = Vector2i(1200, 800)
+	annotation_editor_popup.wrap_controls = true
+	add_child(annotation_editor_popup)
+	
+	var main_container = VBoxContainer.new()
+	main_container.set_anchors_preset(Control.PRESET_FULL_RECT)
+	annotation_editor_popup.add_child(main_container)
+	
+	# Title
+	var title = Label.new()
+	title.text = "Draw annotation on target area"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_size_override("font_size", 16)
+	main_container.add_child(title)
+	
+	# DICOM Viewer
+	annotation_viewer = DicomViewer.new()
+	annotation_viewer.custom_minimum_size = Vector2(800, 600)
+	annotation_viewer.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	annotation_viewer.mouse_filter = Control.MOUSE_FILTER_STOP
+	main_container.add_child(annotation_viewer)
+	
+	# Setup annotation overlay
+	annotation_overlay = Control.new()
+	annotation_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	annotation_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	annotation_viewer.add_child(annotation_overlay)
+	annotation_overlay.draw.connect(_on_annotation_overlay_draw)
+	
+	# Connect viewer input
+	annotation_viewer.gui_input.connect(_on_annotation_viewer_input)
+	
+	# Image navigation
+	var nav_container = HBoxContainer.new()
+	main_container.add_child(nav_container)
+	
+	var prev_btn = Button.new()
+	prev_btn.text = "← Previous Image"
+	prev_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	prev_btn.pressed.connect(_on_annotation_prev_image)
+	nav_container.add_child(prev_btn)
+	
+	var image_label = Label.new()
+	image_label.name = "ImageIndexLabel"
+	image_label.text = "Image 1 / 1"
+	image_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	image_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	nav_container.add_child(image_label)
+	
+	var next_btn = Button.new()
+	next_btn.text = "Next Image →"
+	next_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	next_btn.pressed.connect(_on_annotation_next_image)
+	nav_container.add_child(next_btn)
+	
+	# Annotation tools
+	var tools_container = HBoxContainer.new()
+	main_container.add_child(tools_container)
+	
+	var arrow_btn = Button.new()
+	arrow_btn.name = "ArrowButton"
+	arrow_btn.text = "Draw Arrow"
+	arrow_btn.toggle_mode = true
+	arrow_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	arrow_btn.toggled.connect(_on_arrow_annotation_toggled)
+	tools_container.add_child(arrow_btn)
+	
+	var circle_btn = Button.new()
+	circle_btn.name = "CircleButton"
+	circle_btn.text = "Draw Circle"
+	circle_btn.toggle_mode = true
+	circle_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	circle_btn.toggled.connect(_on_circle_annotation_toggled)
+	tools_container.add_child(circle_btn)
+	
+	var clear_btn = Button.new()
+	clear_btn.text = "Clear Annotation"
+	clear_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	clear_btn.pressed.connect(_on_clear_annotation)
+	tools_container.add_child(clear_btn)
+	
+	# Action buttons
+	var action_container = HBoxContainer.new()
+	main_container.add_child(action_container)
+	
+	var cancel_btn = Button.new()
+	cancel_btn.text = "Cancel"
+	cancel_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	cancel_btn.pressed.connect(func(): annotation_editor_popup.hide())
+	action_container.add_child(cancel_btn)
+	
+	var save_btn = Button.new()
+	save_btn.text = "Save Annotation"
+	save_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	save_btn.pressed.connect(_on_save_annotation)
+	action_container.add_child(save_btn)
+
+func _load_annotation_image(index: int) -> void:
+	if index < 0 or index >= dicom_files.size():
+		return
+	
+	annotation_current_image_index = index
+	
+	if annotation_viewer:
+		annotation_viewer.load_dicom(dicom_files[index])
+		
+		# Update image label
+		var nav_container = annotation_editor_popup.get_child(0).get_child(3) as HBoxContainer
+		if nav_container:
+			var image_label = nav_container.get_node("ImageIndexLabel") as Label
+			if image_label:
+				image_label.text = "Image %d / %d" % [index + 1, dicom_files.size()]
+
+func _on_annotation_prev_image() -> void:
+	if annotation_current_image_index > 0:
+		_load_annotation_image(annotation_current_image_index - 1)
+
+func _on_annotation_next_image() -> void:
+	if annotation_current_image_index < dicom_files.size() - 1:
+		_load_annotation_image(annotation_current_image_index + 1)
+
+func _on_arrow_annotation_toggled(pressed: bool) -> void:
+	if pressed:
+		annotation_mode = "arrow"
+		# Uncheck circle button
+		var tools_container = annotation_editor_popup.get_child(0).get_child(4) as HBoxContainer
+		var circle_btn = tools_container.get_node("CircleButton") as Button
+		circle_btn.button_pressed = false
+	else:
+		annotation_mode = ""
+
+func _on_circle_annotation_toggled(pressed: bool) -> void:
+	if pressed:
+		annotation_mode = "circle"
+		# Uncheck arrow button
+		var tools_container = annotation_editor_popup.get_child(0).get_child(4) as HBoxContainer
+		var arrow_btn = tools_container.get_node("ArrowButton") as Button
+		arrow_btn.button_pressed = false
+	else:
+		annotation_mode = ""
+
+func _on_clear_annotation() -> void:
+	is_drawing_annotation = false
+	temp_annotation_start = Vector2.ZERO
+	temp_annotation_end = Vector2.ZERO
+	temp_circle_center = Vector2.ZERO
+	temp_circle_radius = 0.0
+	if annotation_overlay:
+		annotation_overlay.queue_redraw()
+
+func _on_annotation_viewer_input(event: InputEvent) -> void:
+	# Handle pan gestures for trackpad scrolling
+	if event is InputEventPanGesture:
+		var pg = event as InputEventPanGesture
+		pan_gesture_accumulator += pg.delta.y
+		
+		if pan_gesture_accumulator <= -pan_gesture_threshold:
+			_on_annotation_next_image()
+			pan_gesture_accumulator = 0.0
+		elif pan_gesture_accumulator >= pan_gesture_threshold:
+			_on_annotation_prev_image()
+			pan_gesture_accumulator = 0.0
+		return
+	
+	if event is InputEventMouseButton:
+		var mouse_event = event as InputEventMouseButton
+		
+		# Handle mouse wheel scrolling
+		if mouse_event.button_index == MOUSE_BUTTON_WHEEL_UP and mouse_event.pressed:
+			_on_annotation_prev_image()
+			return
+		elif mouse_event.button_index == MOUSE_BUTTON_WHEEL_DOWN and mouse_event.pressed:
+			_on_annotation_next_image()
+			return
+		
+		if mouse_event.button_index == MOUSE_BUTTON_LEFT:
+			if mouse_event.pressed:
+				if annotation_mode == "arrow":
+					is_drawing_annotation = true
+					temp_annotation_start = mouse_event.position
+					temp_annotation_end = mouse_event.position
+				elif annotation_mode == "circle":
+					is_drawing_annotation = true
+					temp_circle_center = mouse_event.position
+					temp_circle_radius = 0.0
+			else:
+				if is_drawing_annotation:
+					is_drawing_annotation = false
+					if annotation_overlay:
+						annotation_overlay.queue_redraw()
+	
+	elif event is InputEventMouseMotion and is_drawing_annotation:
+		var mouse_motion = event as InputEventMouseMotion
+		
+		if annotation_mode == "arrow":
+			temp_annotation_end = mouse_motion.position
+		elif annotation_mode == "circle":
+			temp_circle_radius = temp_circle_center.distance_to(mouse_motion.position)
+		
+		if annotation_overlay:
+			annotation_overlay.queue_redraw()
+
+func _on_annotation_overlay_draw() -> void:
+	if not annotation_overlay:
+		return
+	
+	if annotation_mode == "arrow" and (is_drawing_annotation or temp_annotation_start != Vector2.ZERO):
+		_draw_arrow_on_canvas(annotation_overlay, temp_annotation_start, temp_annotation_end, Color.YELLOW, 3.0)
+	elif annotation_mode == "circle" and (is_drawing_annotation or temp_circle_radius > 0):
+		annotation_overlay.draw_arc(temp_circle_center, temp_circle_radius, 0, TAU, 32, Color.YELLOW, 3.0)
+
+func _draw_arrow_on_canvas(canvas: Control, start: Vector2, end: Vector2, color: Color, width: float) -> void:
+	canvas.draw_line(start, end, color, width)
+	
+	# Draw arrowhead
+	var direction = (end - start).normalized()
+	var perpendicular = Vector2(-direction.y, direction.x)
+	var arrow_size = 15.0
+	
+	var arrow_point1 = end - direction * arrow_size + perpendicular * (arrow_size * 0.5)
+	var arrow_point2 = end - direction * arrow_size - perpendicular * (arrow_size * 0.5)
+	
+	canvas.draw_line(end, arrow_point1, color, width)
+	canvas.draw_line(end, arrow_point2, color, width)
+
+func _on_save_annotation() -> void:
+	if current_annotation_panel == null:
+		return
+	
+	var annotation_data = {}
+	
+	if annotation_mode == "arrow" and temp_annotation_start != Vector2.ZERO and temp_annotation_end != Vector2.ZERO:
+		annotation_data = {
+			"type": "arrow",
+			"start": temp_annotation_start,
+			"end": temp_annotation_end,
+			"image_index": annotation_current_image_index
+		}
+	elif annotation_mode == "circle" and temp_circle_radius > 0:
+		annotation_data = {
+			"type": "circle",
+			"center": temp_circle_center,
+			"radius": temp_circle_radius,
+			"image_index": annotation_current_image_index
+		}
+	else:
+		push_error("No annotation drawn. Please draw an arrow or circle.")
+		return
+	
+	# Save to panel metadata
+	current_annotation_panel.set_meta("target_annotation", annotation_data)
+	
+	# Update status label
+	var vbox = current_annotation_panel.get_child(0) as VBoxContainer
+	var target_area_container = vbox.get_child(10) as VBoxContainer
+	var target_status = target_area_container.get_child(3) as Label
+	
+	if target_status:
+		var annotation_type = annotation_data.get("type", "unknown")
+		var img_idx = annotation_data.get("image_index", 0)
+		target_status.text = "✓ %s annotation set on image %d" % [annotation_type.capitalize(), img_idx + 1]
+		target_status.add_theme_color_override("font_color", Color.GREEN)
+	
+	# Update image index spinner
+	var image_ref_spin = vbox.get_child(11) as SpinBox
+	if image_ref_spin:
+		image_ref_spin.value = annotation_current_image_index
+	
+	# Close popup
+	annotation_editor_popup.hide()
+	
+	# Clear annotation state
+	_on_clear_annotation()
 
 func _on_add_explanation_image_pressed(panel: PanelContainer) -> void:
 	explanation_image_dialog.set_meta("current_panel", panel)
@@ -505,8 +906,10 @@ func _on_save_button_pressed() -> void:
 				question_dict["type"] = "free_text"
 			elif question_type_idx == 1:
 				question_dict["type"] = "multiple_choice"
-			else:
+			elif question_type_idx == 2:
 				question_dict["type"] = "systematic_review"
+			else:  # question_type_idx == 3
+				question_dict["type"] = "mark_target"
 			
 			question_dict["question"] = (vbox.get_child(5) as LineEdit).text
 			
@@ -530,7 +933,7 @@ func _on_save_button_pressed() -> void:
 				
 				question_dict["choices"] = choices
 				question_dict["correct_index"] = correct_index
-			else:  # Systematic review
+			elif question_type_idx == 2:  # Systematic review
 				var systematic_container = vbox.get_child(9) as VBoxContainer
 				var systems_list = systematic_container.get_child(1) as VBoxContainer
 				var organ_systems_findings = []
@@ -554,10 +957,24 @@ func _on_save_button_pressed() -> void:
 							})
 				
 				question_dict["organ_systems_findings"] = organ_systems_findings
+			else:  # Mark target area
+				# Get target annotation data
+				if child.has_meta("target_annotation"):
+					var target_data = child.get_meta("target_annotation")
+					question_dict["target_annotation"] = target_data
+					
+					# Get tolerance
+					var target_container = vbox.get_child(10) as VBoxContainer
+					var tolerance_slider = target_container.get_child(7) as HSlider
+					question_dict["tolerance"] = tolerance_slider.value
+				else:
+					push_error("Target area question must have a target annotation set")
+					dicom_status.text = "Error: Target annotation not set for mark_target question"
+					return
 			
 			question_dict["image_index"] = int((vbox.get_child(11) as SpinBox).value)
 			
-			# Collect explanation data - FIXED: Create nested dictionary structure
+			# Collect explanation data
 			var explanation_container = vbox.get_child(12) as VBoxContainer
 			var explanation_text = (explanation_container.get_child(1) as TextEdit).text
 			
@@ -567,7 +984,7 @@ func _on_save_button_pressed() -> void:
 				if image_item.has_meta("image_path"):
 					explanation_images.append(image_item.get_meta("image_path"))
 			
-			# Create nested explanation dictionary (this is what the C++ code expects)
+			# Create nested explanation dictionary
 			var explanation_dict = {
 				"text": explanation_text,
 				"images": explanation_images
@@ -582,7 +999,6 @@ func _on_save_button_pressed() -> void:
 	DirAccess.make_dir_recursive_absolute("user://cases")
 	var save_path = "user://cases/%s.tres" % current_case.get_case_name()
 	
-	# Debug: Print absolute path
 	var absolute_path = ProjectSettings.globalize_path(save_path)
 	print("Saving case to: ", save_path)
 	print("Absolute path: ", absolute_path)
@@ -601,7 +1017,6 @@ func show_save_notification() -> void:
 	dicom_status.text = "✓ Case saved successfully!"
 	dicom_status.add_theme_color_override("font_color", Color.GREEN)
 	
-	# Clear the notification after 3 seconds
 	await get_tree().create_timer(3.0).timeout
 	dicom_status.text = "Loaded %d DICOM files" % dicom_files.size()
 	dicom_status.remove_theme_color_override("font_color")

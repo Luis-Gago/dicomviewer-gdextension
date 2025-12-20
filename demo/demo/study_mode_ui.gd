@@ -245,6 +245,8 @@ func display_current_question() -> void:
         setup_multiple_choice_ui(question_dict)
     elif question_type == "systematic_review":
         setup_systematic_review_ui(question_dict)
+    elif question_type == "mark_target":
+        setup_mark_target_ui(question_dict)
     else:
         setup_free_text_ui()
     
@@ -351,6 +353,22 @@ func setup_systematic_review_ui(question_dict: Dictionary) -> void:
             "expected_finding": organ_finding.get("finding_type", "no-finding")
         })
 
+func setup_mark_target_ui(question_dict: Dictionary) -> void:
+    var instruction_label = Label.new()
+    instruction_label.text = "Use the Circle tool (C) or Arrow tool (A) to mark the area described in the question."
+    instruction_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+    answer_container.add_child(instruction_label)
+    
+    var hint_label = Label.new()
+    hint_label.text = "Hint: Draw your annotation as close to the target area as possible."
+    hint_label.add_theme_font_size_override("font_size", 10)
+    hint_label.add_theme_color_override("font_color", Color.YELLOW)
+    answer_container.add_child(hint_label)
+    
+    # Store target data for validation
+    submit_button.set_meta("target_data", question_dict.get("target_annotation", {}))
+    submit_button.set_meta("tolerance", question_dict.get("tolerance", 50.0))
+
 func update_progress() -> void:
     var total = current_case.get_questions().size()
     progress_label.text = "Question %d / %d" % [current_question_index + 1, total]
@@ -451,18 +469,55 @@ func _on_submit_button_pressed() -> void:
         
         feedback_text += "\nScore: %d / %d (%.1f%%)" % [correct_count, total_count, (float(correct_count) / total_count) * 100.0]
         feedback_label.text = feedback_text
+    elif question_type == "mark_target":
+        # Get user's annotation
+        var user_annotations = annotations_per_image.get(current_image_index, [])
+        
+        if user_annotations.size() == 0:
+            feedback_label.text = "Please draw an annotation to mark the target area"
+            return
+        
+        # Get the most recent annotation
+        var user_annotation = user_annotations[user_annotations.size() - 1]
+        
+        # Get target data
+        var target_data = submit_button.get_meta("target_data")
+        var tolerance = submit_button.get_meta("tolerance")
+        
+        # Validate annotation
+        is_correct = validate_target_annotation(user_annotation, target_data, tolerance)
+        
+        if is_correct:
+            feedback_label.text = "✓ Correct! Your annotation is within the target area."
+            feedback_label.add_theme_color_override("font_color", Color.GREEN)
+        else:
+            feedback_label.text = "✗ Incorrect. Your annotation is not within the acceptable range of the target area."
+            feedback_label.add_theme_color_override("font_color", Color.RED)
+        
+        user_answer = JSON.stringify(user_annotation)
+        expected_answer = "Target area marked correctly"
+        
+        user_answers.append({
+            "question": current_question.get("question", ""),
+            "user_answer": user_answer,
+            "expected_answer": expected_answer,
+            "type": question_type,
+            "is_correct": is_correct
+        })
     else:
         user_answer = answer_edit.text.strip_edges()
         expected_answer = current_question.get("expected_answer", "")
         feedback_label.text = "Expected Answer:\n\n%s" % expected_answer
     
-    user_answers.append({
-        "question": current_question.get("question", ""),
-        "user_answer": user_answer,
-        "expected_answer": expected_answer,
-        "type": question_type,
-        "is_correct": is_correct if question_type in ["multiple_choice", "systematic_review"] else null
-    })
+    # Only append if not already appended (mark_target does it inline)
+    if question_type != "mark_target":
+        user_answers.append({
+            "question": current_question.get("question", ""),
+            "user_answer": user_answer,
+            "expected_answer": expected_answer,
+            "type": question_type,
+            "is_correct": is_correct if question_type in ["multiple_choice", "systematic_review"] else null
+        })
     
     # Show explanation if available
     show_explanation(current_question_index)
@@ -916,6 +971,34 @@ func delete_selected_annotation() -> void:
         annotations.remove_at(selected_annotation_index)
         selected_annotation_index = -1
         annotation_overlay.queue_redraw()
+
+func validate_target_annotation(user_annotation: Dictionary, target_annotation: Dictionary, tolerance: float) -> bool:
+    if user_annotation["type"] != target_annotation["type"]:
+        return false  # Must use same annotation type
+    
+    if user_annotation["type"] == "circle":
+        # Check if user's circle overlaps or is near target circle
+        var user_center = user_annotation["center"]
+        var user_radius = user_annotation["radius"]
+        var target_center = target_annotation["center"]
+        var target_radius = target_annotation["radius"]
+        
+        var distance = user_center.distance_to(target_center)
+        
+        # Check if circles overlap or are within tolerance
+        return distance < (user_radius + target_radius + tolerance)
+        
+    elif user_annotation["type"] == "arrow":
+        # Check if user's arrow points to similar area as target arrow
+        var user_end = user_annotation["end"]
+        var target_end = target_annotation["end"]
+        
+        var distance = user_end.distance_to(target_end)
+        
+        # Arrow endpoint must be within tolerance
+        return distance < tolerance
+    
+    return false
 
 func _on_arrow_annotation_button_toggled(button_pressed: bool) -> void:
     if button_pressed:
