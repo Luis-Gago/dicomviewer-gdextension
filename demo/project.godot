@@ -14,3 +14,7 @@ config/name="godot cpp template"
 run/main_scene="uid://mainmenu001"
 config/features=PackedStringArray("4.5", "Forward Plus")
 config/icon="res://icon.svg"
+
+[rendering]
+
+textures/vram_compression/import_etc2_astc=true
