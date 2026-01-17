@@ -64,6 +64,9 @@ void DicomViewer::_bind_methods() {
     ClassDB::bind_method(D_METHOD("apply_t2_brain_preset"), &DicomViewer::apply_t2_brain_preset);
     ClassDB::bind_method(D_METHOD("apply_mammography_preset"), &DicomViewer::apply_mammography_preset);
     ClassDB::bind_method(D_METHOD("apply_auto_preset"), &DicomViewer::apply_auto_preset);
+    
+    ClassDB::bind_method(D_METHOD("get_image_width"), &DicomViewer::get_image_width);
+    ClassDB::bind_method(D_METHOD("get_image_height"), &DicomViewer::get_image_height);
 
     ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "window"), "set_window", "get_window");
     ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "level"), "set_level", "get_level");

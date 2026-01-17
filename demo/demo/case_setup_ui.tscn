@@ -109,6 +109,11 @@ title = "Select DICOM Folder"
 size = Vector2i(800, 600)
 file_mode = 2
 
+[node name="WarningDialog" type="AcceptDialog" parent="."]
+title = "Warning"
+size = Vector2i(400, 150)
+ok_button_text = "OK"
+
 [connection signal="pressed" from="MarginContainer/VBoxContainer/DicomButtonsContainer/AddDicomFilesButton" to="." method="_on_add_dicom_files_button_pressed"]
 [connection signal="pressed" from="MarginContainer/VBoxContainer/DicomButtonsContainer/AddDicomButton" to="." method="_on_add_dicom_button_pressed"]
 [connection signal="pressed" from="MarginContainer/VBoxContainer/AddQuestionButton" to="." method="_on_add_question_button_pressed"]

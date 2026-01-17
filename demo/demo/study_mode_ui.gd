@@ -354,8 +354,22 @@ func setup_systematic_review_ui(question_dict: Dictionary) -> void:
         })
 
 func setup_mark_target_ui(question_dict: Dictionary) -> void:
+    # Get the required annotation type
+    var target_annotation = question_dict.get("target_annotation", {})
+    var required_type = target_annotation.get("type", "").to_lower()
+    
     var instruction_label = Label.new()
-    instruction_label.text = "Use the Circle tool (C) or Arrow tool (A) to mark the area described in the question."
+    
+    # Display specific instruction based on required annotation type
+    if required_type == "circle":
+        instruction_label.text = "Use the Circle tool (C) to mark the area described in the question."
+        instruction_label.add_theme_color_override("font_color", Color.CYAN)
+    elif required_type == "arrow":
+        instruction_label.text = "Use the Arrow tool (A) to mark the area described in the question."
+        instruction_label.add_theme_color_override("font_color", Color.CYAN)
+    else:
+        instruction_label.text = "Use the Circle tool (C) or Arrow tool (A) to mark the area described in the question."
+    
     instruction_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
     answer_container.add_child(instruction_label)
     
@@ -488,11 +502,22 @@ func _on_submit_button_pressed() -> void:
         is_correct = validate_target_annotation(user_annotation, target_data, tolerance)
         
         if is_correct:
-            feedback_label.text = "✓ Correct! Your annotation is within the target area."
+            feedback_label.text = "✓ Correct! Your annotation is within the target area.\n\nThe correct annotation is now displayed in GREEN."
             feedback_label.add_theme_color_override("font_color", Color.GREEN)
         else:
-            feedback_label.text = "✗ Incorrect. Your annotation is not within the acceptable range of the target area."
+            feedback_label.text = "✗ Incorrect. Your annotation is not within the acceptable range of the target area.\n\nThe correct annotation is now displayed in GREEN for comparison."
             feedback_label.add_theme_color_override("font_color", Color.RED)
+        
+        # Add the correct annotation to the display (but don't save it to user's answers)
+        # Store it with a special flag so it renders differently
+        if not annotations_per_image.has(current_image_index):
+            annotations_per_image[current_image_index] = []
+        
+        # Add correct annotation with a marker (keep original normalized format)
+        var correct_annotation = target_data.duplicate(true)
+        correct_annotation["is_correct_answer"] = true
+        annotations_per_image[current_image_index].append(correct_annotation)
+        annotation_overlay.queue_redraw()
         
         user_answer = JSON.stringify(user_annotation)
         expected_answer = "Target area marked correctly"
@@ -739,18 +764,27 @@ func _on_annotation_overlay_draw() -> void:
     var annotations = annotations_per_image.get(current_image_index, [])
     for i in range(annotations.size()):
         var annotation = annotations[i]
-        var color = Color.YELLOW if i == selected_annotation_index else Color.RED
         
-        if annotation["type"] == "arrow":
-            draw_arrow(annotation_overlay, annotation["start"], annotation["end"], color, 3.0)
-        elif annotation["type"] == "circle":
-            draw_circle_annotation(annotation_overlay, annotation["center"], annotation["radius"], color, 3.0)
+        # Denormalize annotation coordinates if needed
+        var denorm_annotation = denormalize_annotation(annotation)
+        
+        # Check if this is the correct answer annotation
+        var is_correct_answer = annotation.get("is_correct_answer", false)
+        
+        # Color logic: Green for correct answer, Yellow for selected, Red for user annotations
+        var color = Color.GREEN if is_correct_answer else (Color.YELLOW if i == selected_annotation_index else Color.RED)
+        var width = 4.0 if is_correct_answer else 3.0  # Make correct answer slightly thicker
+        
+        if denorm_annotation["type"] == "arrow":
+            draw_arrow(annotation_overlay, denorm_annotation["start"], denorm_annotation["end"], color, width)
+        elif denorm_annotation["type"] == "circle":
+            draw_circle_annotation(annotation_overlay, denorm_annotation["center"], denorm_annotation["radius"], color, width)
     
     # Draw annotation being created
     if is_drawing_arrow:
-        draw_arrow(annotation_overlay, arrow_start_pos, arrow_end_pos, Color.GREEN, 2.0)
+        draw_arrow(annotation_overlay, arrow_start_pos, arrow_end_pos, Color.CYAN, 2.0)
     elif is_drawing_circle:
-        draw_circle_annotation(annotation_overlay, circle_center_pos, circle_radius, Color.GREEN, 2.0)
+        draw_circle_annotation(annotation_overlay, circle_center_pos, circle_radius, Color.CYAN, 2.0)
 
 func draw_arrow(canvas: Control, start: Vector2, end: Vector2, color: Color, width: float) -> void:
     # Draw line
@@ -930,15 +964,19 @@ func select_annotation_at_position(pos: Vector2) -> void:
     
     for i in range(annotations.size()):
         var annotation = annotations[i]
+        
+        # Denormalize annotation coordinates if needed
+        var denorm_annotation = denormalize_annotation(annotation)
+        
         var is_near = false
         
-        if annotation["type"] == "arrow":
+        if denorm_annotation["type"] == "arrow":
             # Check if click is near the arrow line
-            is_near = point_to_line_distance(pos, annotation["start"], annotation["end"]) < selection_threshold
-        elif annotation["type"] == "circle":
+            is_near = point_to_line_distance(pos, denorm_annotation["start"], denorm_annotation["end"]) < selection_threshold
+        elif denorm_annotation["type"] == "circle":
             # Check if click is near the circle outline
-            var distance_from_center = pos.distance_to(annotation["center"])
-            is_near = abs(distance_from_center - annotation["radius"]) < selection_threshold
+            var distance_from_center = pos.distance_to(denorm_annotation["center"])
+            is_near = abs(distance_from_center - denorm_annotation["radius"]) < selection_threshold
         
         if is_near:
             selected_annotation_index = i
@@ -972,31 +1010,71 @@ func delete_selected_annotation() -> void:
         selected_annotation_index = -1
         annotation_overlay.queue_redraw()
 
+# Helper function to denormalize annotation coordinates
+# Converts normalized coordinates (0-1 range) back to screen space
+func denormalize_annotation(annotation: Dictionary) -> Dictionary:
+    # If annotation already has non-normalized coordinates, return as-is (backward compatibility)
+    if annotation.has("start") or annotation.has("center"):
+        return annotation
+    
+    # Get viewer size for coordinate conversion
+    var viewer_size = dicom_viewer.size
+    
+    var denormalized = annotation.duplicate(true)
+    
+    if annotation["type"] == "arrow" and annotation.has("start_normalized") and annotation.has("end_normalized"):
+        denormalized["start"] = Vector2(
+            annotation["start_normalized"].x * viewer_size.x,
+            annotation["start_normalized"].y * viewer_size.y
+        )
+        denormalized["end"] = Vector2(
+            annotation["end_normalized"].x * viewer_size.x,
+            annotation["end_normalized"].y * viewer_size.y
+        )
+    elif annotation["type"] == "circle" and annotation.has("center_normalized") and annotation.has("radius_normalized"):
+        var avg_size = (viewer_size.x + viewer_size.y) / 2.0
+        denormalized["center"] = Vector2(
+            annotation["center_normalized"].x * viewer_size.x,
+            annotation["center_normalized"].y * viewer_size.y
+        )
+        denormalized["radius"] = annotation["radius_normalized"] * avg_size
+    
+    return denormalized
+
 func validate_target_annotation(user_annotation: Dictionary, target_annotation: Dictionary, tolerance: float) -> bool:
-    if user_annotation["type"] != target_annotation["type"]:
+    # Denormalize both annotations to screen space for comparison
+    var user_denorm = denormalize_annotation(user_annotation)
+    var target_denorm = denormalize_annotation(target_annotation)
+    
+    if user_denorm["type"] != target_denorm["type"]:
         return false  # Must use same annotation type
     
-    if user_annotation["type"] == "circle":
-        # Check if user's circle overlaps or is near target circle
-        var user_center = user_annotation["center"]
-        var user_radius = user_annotation["radius"]
-        var target_center = target_annotation["center"]
-        var target_radius = target_annotation["radius"]
+    if user_denorm["type"] == "circle":
+        # Check if user's circle center is close to target circle center
+        var user_center = user_denorm["center"]
+        var user_radius = user_denorm["radius"]
+        var target_center = target_denorm["center"]
+        var target_radius = target_denorm["radius"]
         
-        var distance = user_center.distance_to(target_center)
+        var center_distance = user_center.distance_to(target_center)
+        var radius_difference = abs(user_radius - target_radius)
         
-        # Check if circles overlap or are within tolerance
-        return distance < (user_radius + target_radius + tolerance)
+        # Both the center must be within tolerance AND radius should be similar
+        # Check if center is within tolerance and radius is within 50% of target radius or within tolerance
+        return center_distance < tolerance and (radius_difference < tolerance or radius_difference < target_radius * 0.5)
         
-    elif user_annotation["type"] == "arrow":
+    elif user_denorm["type"] == "arrow":
         # Check if user's arrow points to similar area as target arrow
-        var user_end = user_annotation["end"]
-        var target_end = target_annotation["end"]
+        # The most important thing is that the arrowhead (endpoint) is in the right location
+        var user_end = user_denorm["end"]
+        var target_end = target_denorm["end"]
         
-        var distance = user_end.distance_to(target_end)
+        # Check endpoint distance - this is where the arrow is pointing
+        var end_distance = user_end.distance_to(target_end)
         
-        # Arrow endpoint must be within tolerance
-        return distance < tolerance
+        # The arrowhead must be within tolerance
+        # Direction doesn't matter as much - what matters is WHERE the arrow points to
+        return end_distance < tolerance
     
     return false
 

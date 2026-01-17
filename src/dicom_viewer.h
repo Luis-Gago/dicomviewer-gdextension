@@ -58,6 +58,10 @@ public:
     float get_pixel_aspect_ratio() const { return pixel_aspect_ratio; }
     String get_modality() const { return current_modality; }
     
+    // Image dimension methods
+    int get_image_width() const { return raw_width; }
+    int get_image_height() const { return raw_height; }
+    
     // Window/Level presets
     void apply_soft_tissue_preset();
     void apply_lung_preset();

@@ -7,6 +7,7 @@ extends Control
 @onready var folder_dialog: FileDialog = $FolderDialog
 @onready var dicom_status: Label = $MarginContainer/VBoxContainer/DicomStatus
 @onready var title_label: Label = $MarginContainer/VBoxContainer/Title
+@onready var warning_dialog: AcceptDialog = $WarningDialog
 
 var explanation_image_dialog: FileDialog
 var annotation_editor_popup: Window
@@ -22,6 +23,9 @@ var temp_circle_radius: float = 0.0
 var current_annotation_panel: PanelContainer = null
 var pan_gesture_accumulator: float = 0.0
 var pan_gesture_threshold: float = 1.0
+var annotation_window: float = 400.0
+var annotation_level: float = 40.0
+var annotation_windowing_set: bool = false
 
 var current_case: RadiologyCase
 var dicom_files: PackedStringArray = []
@@ -90,7 +94,7 @@ func populate_question_panel(panel: PanelContainer, question_dict: Dictionary) -
 	
 	# Set organ system
 	var organ_dropdown = vbox.get_child(1) as OptionButton
-	var organ_system = question_dict.get("organ_system", "Chest")
+	var organ_system = question_dict.get("organ_system", "General")
 	for i in range(organ_dropdown.item_count):
 		if organ_dropdown.get_item_text(i) == organ_system:
 			organ_dropdown.selected = i
@@ -152,10 +156,10 @@ func populate_question_panel(panel: PanelContainer, question_dict: Dictionary) -
 		# Trigger the visibility change for mark target
 		type_dropdown.item_selected.emit(3)
 		
-		var target_container = vbox.get_child(10) as VBoxContainer
+		var target_container = vbox.get_node("TargetAreaContainer") as VBoxContainer
 		
 		if target_container == null:
-			push_error("Target container not found at index 10. VBox has %d children." % vbox.get_child_count())
+			push_error("Target container not found. VBox has %d children." % vbox.get_child_count())
 			return
 		
 		# Set target annotation data if exists
@@ -169,18 +173,22 @@ func populate_question_panel(panel: PanelContainer, question_dict: Dictionary) -
 		
 		# Set tolerance
 		var tolerance = question_dict.get("tolerance", 50.0)
-		var tolerance_slider = target_container.get_child(7) as HSlider
+		var tolerance_slider = target_container.get_node("ToleranceSlider") as HSlider
 		if tolerance_slider:
 			tolerance_slider.value = tolerance
 		else:
-			push_error("Tolerance slider not found at index 7. Target container has %d children." % target_container.get_child_count())
+			push_error("Tolerance slider not found. Target container has %d children." % target_container.get_child_count())
 	
 	# Set image index
-	var image_ref_spin = vbox.get_child(11) as SpinBox
-	image_ref_spin.value = question_dict.get("image_index", 0)
+	var image_ref_spin = vbox.get_node("ImageRefSpin") as SpinBox
+	if image_ref_spin:
+		image_ref_spin.value = question_dict.get("image_index", 0)
 	
 	# Set explanation text
-	var explanation_container = vbox.get_child(12) as VBoxContainer
+	var explanation_container = vbox.get_node("ExplanationContainer") as VBoxContainer
+	if not explanation_container:
+		return
+		
 	var explanation_edit = explanation_container.get_child(1) as TextEdit
 	
 	# Check if using new nested structure
@@ -297,16 +305,22 @@ func create_question_panel() -> PanelContainer:
 	vbox.add_theme_constant_override("separation", 10)
 	panel.add_child(vbox)
 	
-	# Organ system
+	# Radiology subspecialty
 	var organ_label = Label.new()
-	organ_label.text = "Organ System:"
+	organ_label.text = "Radiology Subspecialty:"
 	vbox.add_child(organ_label)
 	
 	var organ_dropdown = OptionButton.new()
-	organ_dropdown.add_item("Chest")
-	organ_dropdown.add_item("Abdomen")
-	organ_dropdown.add_item("Brain")
+	organ_dropdown.name = "OrganDropdown"
+	organ_dropdown.add_item("General")
+	organ_dropdown.add_item("Chest/Thoracic")
+	organ_dropdown.add_item("Body/Abdominal")
+	organ_dropdown.add_item("Neuroradiology")
 	organ_dropdown.add_item("Musculoskeletal")
+	organ_dropdown.add_item("Pediatric")
+	organ_dropdown.add_item("Breast")
+	organ_dropdown.add_item("Nuclear Medicine")
+	organ_dropdown.add_item("Emergency Radiology")
 	organ_dropdown.add_item("Other")
 	vbox.add_child(organ_dropdown)
 	
@@ -316,6 +330,7 @@ func create_question_panel() -> PanelContainer:
 	vbox.add_child(type_label)
 	
 	var type_dropdown = OptionButton.new()
+	type_dropdown.name = "TypeDropdown"
 	type_dropdown.add_item("Free Text")
 	type_dropdown.add_item("Multiple Choice")
 	type_dropdown.add_item("Systematic Review")
@@ -329,7 +344,8 @@ func create_question_panel() -> PanelContainer:
 	vbox.add_child(question_label)
 	
 	var question_edit = LineEdit.new()
-	question_edit.placeholder_text = "e.g., Identify the abnormality in the right lung"
+	question_edit.name = "QuestionEdit"
+	question_edit.placeholder_text = "Question Text Here"
 	vbox.add_child(question_edit)
 	
 	# Free text answer (initially visible)
@@ -338,12 +354,14 @@ func create_question_panel() -> PanelContainer:
 	vbox.add_child(answer_label)
 	
 	var answer_edit = TextEdit.new()
+	answer_edit.name = "AnswerEdit"
 	answer_edit.custom_minimum_size = Vector2(0, 80)
-	answer_edit.placeholder_text = "e.g., Pneumothorax in right upper lobe"
+	answer_edit.placeholder_text = "Expected Answer Text Here"
 	vbox.add_child(answer_edit)
 	
 	# Multiple choice container (initially hidden)
 	var mc_container = VBoxContainer.new()
+	mc_container.name = "MCContainer"
 	mc_container.visible = false
 	vbox.add_child(mc_container)
 	
@@ -371,6 +389,7 @@ func create_question_panel() -> PanelContainer:
 	
 	# Systematic review container (initially hidden)
 	var systematic_container = VBoxContainer.new()
+	systematic_container.name = "SystematicContainer"
 	systematic_container.visible = false
 	vbox.add_child(systematic_container)
 	
@@ -389,6 +408,7 @@ func create_question_panel() -> PanelContainer:
 	
 	# Target Area container (initially hidden) - NEW
 	var target_area_container = VBoxContainer.new()
+	target_area_container.name = "TargetAreaContainer"
 	target_area_container.visible = false
 	vbox.add_child(target_area_container)
 	
@@ -411,23 +431,13 @@ func create_question_panel() -> PanelContainer:
 	target_status.add_theme_color_override("font_color", Color.ORANGE)
 	target_area_container.add_child(target_status)
 	
-	# Manual entry option
-	var manual_label = Label.new()
-	manual_label.text = "Or enter annotation data manually:"
-	manual_label.add_theme_font_size_override("font_size", 10)
-	target_area_container.add_child(manual_label)
-	
-	var annotation_type_dropdown = OptionButton.new()
-	annotation_type_dropdown.add_item("Circle")
-	annotation_type_dropdown.add_item("Arrow")
-	target_area_container.add_child(annotation_type_dropdown)
-	
 	# Tolerance slider
 	var tolerance_label = Label.new()
 	tolerance_label.text = "Acceptance Tolerance (pixels):"
 	target_area_container.add_child(tolerance_label)
 	
 	var tolerance_slider = HSlider.new()
+	tolerance_slider.name = "ToleranceSlider"
 	tolerance_slider.min_value = 10.0
 	tolerance_slider.max_value = 200.0
 	tolerance_slider.value = 50.0
@@ -448,12 +458,14 @@ func create_question_panel() -> PanelContainer:
 	vbox.add_child(image_ref_label)
 	
 	var image_ref_spin = SpinBox.new()
+	image_ref_spin.name = "ImageRefSpin"
 	image_ref_spin.min_value = 0
 	image_ref_spin.max_value = 999
 	vbox.add_child(image_ref_spin)
 	
 	# Explanation section
 	var explanation_container = VBoxContainer.new()
+	explanation_container.name = "ExplanationContainer"
 	explanation_container.add_theme_constant_override("separation", 5)
 	vbox.add_child(explanation_container)
 	
@@ -505,16 +517,19 @@ func create_question_panel() -> PanelContainer:
 func _open_annotation_editor(panel: PanelContainer) -> void:
 	if dicom_files.size() == 0:
 		var vbox = panel.get_child(0) as VBoxContainer
-		var target_area_container = vbox.get_child(10) as VBoxContainer
-		var target_status = target_area_container.get_child(3) as Label
-		target_status.text = "⚠ Please load DICOM files first"
-		target_status.add_theme_color_override("font_color", Color.RED)
+		var target_area_container = vbox.get_node("TargetAreaContainer") as VBoxContainer
+		if target_area_container:
+			var target_status = target_area_container.get_child(3) as Label
+			if target_status:
+				target_status.text = "⚠ Please load DICOM files first"
+				target_status.add_theme_color_override("font_color", Color.RED)
 		return
 	
 	current_annotation_panel = panel
 	annotation_current_image_index = 0
 	annotation_mode = ""
 	is_drawing_annotation = false
+	annotation_windowing_set = false
 	
 	# Create annotation editor popup if it doesn't exist
 	if annotation_editor_popup == null:
@@ -560,6 +575,82 @@ func _create_annotation_editor_popup() -> void:
 	
 	# Connect viewer input
 	annotation_viewer.gui_input.connect(_on_annotation_viewer_input)
+	
+	# Windowing presets
+	var preset_label = Label.new()
+	preset_label.text = "Windowing Presets:"
+	main_container.add_child(preset_label)
+	
+	var preset_container = HBoxContainer.new()
+	main_container.add_child(preset_container)
+	
+	var soft_tissue_btn = Button.new()
+	soft_tissue_btn.text = "Soft Tissue"
+	soft_tissue_btn.pressed.connect(func(): 
+		annotation_viewer.apply_soft_tissue_preset()
+		annotation_window = 400.0
+		annotation_level = 40.0
+		annotation_windowing_set = true
+	)
+	preset_container.add_child(soft_tissue_btn)
+	
+	var lung_btn = Button.new()
+	lung_btn.text = "Lung"
+	lung_btn.pressed.connect(func(): 
+		annotation_viewer.apply_lung_preset()
+		annotation_window = 1500.0
+		annotation_level = -600.0
+		annotation_windowing_set = true
+	)
+	preset_container.add_child(lung_btn)
+	
+	var bone_btn = Button.new()
+	bone_btn.text = "Bone"
+	bone_btn.pressed.connect(func(): 
+		annotation_viewer.apply_bone_preset()
+		annotation_window = 1800.0
+		annotation_level = 400.0
+		annotation_windowing_set = true
+	)
+	preset_container.add_child(bone_btn)
+	
+	var brain_btn = Button.new()
+	brain_btn.text = "Brain"
+	brain_btn.pressed.connect(func(): 
+		annotation_viewer.apply_brain_preset()
+		annotation_window = 80.0
+		annotation_level = 40.0
+		annotation_windowing_set = true
+	)
+	preset_container.add_child(brain_btn)
+	
+	var t2_brain_btn = Button.new()
+	t2_brain_btn.text = "T2 Brain"
+	t2_brain_btn.pressed.connect(func(): 
+		annotation_viewer.apply_t2_brain_preset()
+		annotation_window = 160.0
+		annotation_level = 80.0
+		annotation_windowing_set = true
+	)
+	preset_container.add_child(t2_brain_btn)
+	
+	var mammo_btn = Button.new()
+	mammo_btn.text = "Mammo"
+	mammo_btn.pressed.connect(func(): 
+		annotation_viewer.apply_mammography_preset()
+		annotation_window = 4000.0
+		annotation_level = 2000.0
+		annotation_windowing_set = true
+	)
+	preset_container.add_child(mammo_btn)
+	
+	var auto_btn = Button.new()
+	auto_btn.text = "Auto"
+	auto_btn.pressed.connect(func(): 
+		annotation_viewer.apply_auto_preset()
+		annotation_windowing_set = false
+	)
+	preset_container.add_child(auto_btn)
 	
 	# Image navigation
 	var nav_container = HBoxContainer.new()
@@ -635,8 +726,12 @@ func _load_annotation_image(index: int) -> void:
 	if annotation_viewer:
 		annotation_viewer.load_dicom(dicom_files[index])
 		
+		# Reapply windowing settings if user has set them
+		if annotation_windowing_set:
+			annotation_viewer.set_window_level(annotation_window, annotation_level)
+		
 		# Update image label
-		var nav_container = annotation_editor_popup.get_child(0).get_child(3) as HBoxContainer
+		var nav_container = annotation_editor_popup.get_child(0).get_child(4) as HBoxContainer
 		if nav_container:
 			var image_label = nav_container.get_node("ImageIndexLabel") as Label
 			if image_label:
@@ -654,7 +749,7 @@ func _on_arrow_annotation_toggled(pressed: bool) -> void:
 	if pressed:
 		annotation_mode = "arrow"
 		# Uncheck circle button
-		var tools_container = annotation_editor_popup.get_child(0).get_child(4) as HBoxContainer
+		var tools_container = annotation_editor_popup.get_child(0).get_child(5) as HBoxContainer
 		var circle_btn = tools_container.get_node("CircleButton") as Button
 		circle_btn.button_pressed = false
 	else:
@@ -664,7 +759,7 @@ func _on_circle_annotation_toggled(pressed: bool) -> void:
 	if pressed:
 		annotation_mode = "circle"
 		# Uncheck arrow button
-		var tools_container = annotation_editor_popup.get_child(0).get_child(4) as HBoxContainer
+		var tools_container = annotation_editor_popup.get_child(0).get_child(5) as HBoxContainer
 		var arrow_btn = tools_container.get_node("ArrowButton") as Button
 		arrow_btn.button_pressed = false
 	else:
@@ -758,20 +853,45 @@ func _on_save_annotation() -> void:
 	if current_annotation_panel == null:
 		return
 	
+	# Get image dimensions for normalization
+	var image_width = annotation_viewer.get_image_width()
+	var image_height = annotation_viewer.get_image_height()
+	
+	if image_width <= 0 or image_height <= 0:
+		push_error("Invalid image dimensions. Cannot save annotation.")
+		return
+	
+	# Get the viewer size for coordinate conversion
+	var viewer_size = annotation_viewer.size
+	
 	var annotation_data = {}
 	
 	if annotation_mode == "arrow" and temp_annotation_start != Vector2.ZERO and temp_annotation_end != Vector2.ZERO:
+		# Normalize coordinates to 0-1 range relative to viewer size
+		# This makes them independent of the viewer's display size
 		annotation_data = {
 			"type": "arrow",
-			"start": temp_annotation_start,
-			"end": temp_annotation_end,
+			"start_normalized": Vector2(
+				temp_annotation_start.x / viewer_size.x,
+				temp_annotation_start.y / viewer_size.y
+			),
+			"end_normalized": Vector2(
+				temp_annotation_end.x / viewer_size.x,
+				temp_annotation_end.y / viewer_size.y
+			),
 			"image_index": annotation_current_image_index
 		}
 	elif annotation_mode == "circle" and temp_circle_radius > 0:
+		# Normalize center position and radius
+		# Radius is normalized by the average of width and height to be scale-independent
+		var avg_size = (viewer_size.x + viewer_size.y) / 2.0
 		annotation_data = {
 			"type": "circle",
-			"center": temp_circle_center,
-			"radius": temp_circle_radius,
+			"center_normalized": Vector2(
+				temp_circle_center.x / viewer_size.x,
+				temp_circle_center.y / viewer_size.y
+			),
+			"radius_normalized": temp_circle_radius / avg_size,
 			"image_index": annotation_current_image_index
 		}
 	else:
@@ -783,7 +903,10 @@ func _on_save_annotation() -> void:
 	
 	# Update status label
 	var vbox = current_annotation_panel.get_child(0) as VBoxContainer
-	var target_area_container = vbox.get_child(10) as VBoxContainer
+	var target_area_container = vbox.get_node("TargetAreaContainer") as VBoxContainer
+	if not target_area_container:
+		return
+		
 	var target_status = target_area_container.get_child(3) as Label
 	
 	if target_status:
@@ -793,7 +916,7 @@ func _on_save_annotation() -> void:
 		target_status.add_theme_color_override("font_color", Color.GREEN)
 	
 	# Update image index spinner
-	var image_ref_spin = vbox.get_child(11) as SpinBox
+	var image_ref_spin = vbox.get_node("ImageRefSpin") as SpinBox
 	if image_ref_spin:
 		image_ref_spin.value = annotation_current_image_index
 	
@@ -813,7 +936,10 @@ func _on_explanation_image_dialog_files_selected(paths: PackedStringArray) -> vo
 		return
 	
 	var vbox = panel.get_child(0) as VBoxContainer
-	var explanation_container = vbox.get_child(12) as VBoxContainer
+	var explanation_container = vbox.get_node("ExplanationContainer") as VBoxContainer
+	if not explanation_container:
+		return
+		
 	var images_list = explanation_container.get_child(3) as VBoxContainer
 	
 	for path in paths:
@@ -881,12 +1007,14 @@ func create_explanation_image_item(image_path: String) -> HBoxContainer:
 func _on_save_button_pressed() -> void:
 	if case_name_edit.text.strip_edges() == "":
 		push_error("Please enter a case name")
-		dicom_status.text = "Error: Please enter a case name"
+		warning_dialog.dialog_text = "Please enter a case name before saving."
+		warning_dialog.popup_centered()
 		return
 	
 	if dicom_files.size() == 0:
 		push_error("Please select DICOM files")
-		dicom_status.text = "Error: Please select DICOM files"
+		warning_dialog.dialog_text = "Please select DICOM files before saving."
+		warning_dialog.popup_centered()
 		return
 	
 	current_case.set_case_name(case_name_edit.text)
@@ -899,8 +1027,10 @@ func _on_save_button_pressed() -> void:
 			var vbox = child.get_child(0) as VBoxContainer
 			var question_dict = Dictionary()
 			
-			question_dict["organ_system"] = (vbox.get_child(1) as OptionButton).get_item_text((vbox.get_child(1) as OptionButton).selected)
-			var question_type_idx = (vbox.get_child(3) as OptionButton).selected
+			var organ_dropdown = vbox.get_node("OrganDropdown") as OptionButton
+			question_dict["organ_system"] = organ_dropdown.get_item_text(organ_dropdown.selected)
+			var type_dropdown = vbox.get_node("TypeDropdown") as OptionButton
+			var question_type_idx = type_dropdown.selected
 			
 			if question_type_idx == 0:
 				question_dict["type"] = "free_text"
@@ -911,12 +1041,14 @@ func _on_save_button_pressed() -> void:
 			else:  # question_type_idx == 3
 				question_dict["type"] = "mark_target"
 			
-			question_dict["question"] = (vbox.get_child(5) as LineEdit).text
+			var question_edit = vbox.get_node("QuestionEdit") as LineEdit
+			question_dict["question"] = question_edit.text
 			
 			if question_type_idx == 0:  # Free text
-				question_dict["expected_answer"] = (vbox.get_child(7) as TextEdit).text
+				var answer_edit = vbox.get_node("AnswerEdit") as TextEdit
+				question_dict["expected_answer"] = answer_edit.text
 			elif question_type_idx == 1:  # Multiple choice
-				var mc_container = vbox.get_child(8) as VBoxContainer
+				var mc_container = vbox.get_node("MCContainer") as VBoxContainer
 				var choices_container = mc_container.get_child(1) as VBoxContainer
 				var choices = []
 				var correct_index = -1
@@ -934,7 +1066,7 @@ func _on_save_button_pressed() -> void:
 				question_dict["choices"] = choices
 				question_dict["correct_index"] = correct_index
 			elif question_type_idx == 2:  # Systematic review
-				var systematic_container = vbox.get_child(9) as VBoxContainer
+				var systematic_container = vbox.get_node("SystematicContainer") as VBoxContainer
 				var systems_list = systematic_container.get_child(1) as VBoxContainer
 				var organ_systems_findings = []
 				
@@ -963,26 +1095,36 @@ func _on_save_button_pressed() -> void:
 					var target_data = child.get_meta("target_annotation")
 					question_dict["target_annotation"] = target_data
 					
-					# Get tolerance
-					var target_container = vbox.get_child(10) as VBoxContainer
-					var tolerance_slider = target_container.get_child(7) as HSlider
-					question_dict["tolerance"] = tolerance_slider.value
+					# Get tolerance with proper null checks
+					var target_container = vbox.get_node("TargetAreaContainer") as VBoxContainer
+					var tolerance_value = 50.0  # Default value
+					
+					if target_container:
+						var tolerance_slider = target_container.get_node("ToleranceSlider") as HSlider
+						if tolerance_slider:
+							tolerance_value = tolerance_slider.value
+					
+					question_dict["tolerance"] = tolerance_value
 				else:
 					push_error("Target area question must have a target annotation set")
-					dicom_status.text = "Error: Target annotation not set for mark_target question"
+					warning_dialog.dialog_text = "Error: Target annotation not set for mark_target question."
+					warning_dialog.popup_centered()
 					return
 			
-			question_dict["image_index"] = int((vbox.get_child(11) as SpinBox).value)
+			var image_ref_spin = vbox.get_node("ImageRefSpin") as SpinBox
+			question_dict["image_index"] = int(image_ref_spin.value) if image_ref_spin else 0
 			
 			# Collect explanation data
-			var explanation_container = vbox.get_child(12) as VBoxContainer
-			var explanation_text = (explanation_container.get_child(1) as TextEdit).text
+			var explanation_container = vbox.get_node("ExplanationContainer") as VBoxContainer
+			var explanation_text = (explanation_container.get_child(1) as TextEdit).text if explanation_container else ""
 			
-			var images_list = explanation_container.get_child(3) as VBoxContainer
 			var explanation_images = []
-			for image_item in images_list.get_children():
-				if image_item.has_meta("image_path"):
-					explanation_images.append(image_item.get_meta("image_path"))
+			if explanation_container:
+				var images_list = explanation_container.get_child(3) as VBoxContainer
+				if images_list:
+					for image_item in images_list.get_children():
+						if image_item.has_meta("image_path"):
+							explanation_images.append(image_item.get_meta("image_path"))
 			
 			# Create nested explanation dictionary
 			var explanation_dict = {
@@ -1011,7 +1153,8 @@ func _on_save_button_pressed() -> void:
 		show_save_notification()
 	else:
 		push_error("Failed to save case")
-		dicom_status.text = "Error: Failed to save case"
+		warning_dialog.dialog_text = "Failed to save case. Please check the console for more details."
+		warning_dialog.popup_centered()
 
 func show_save_notification() -> void:
 	dicom_status.text = "✓ Case saved successfully!"
