@@ -298,9 +298,31 @@ func scan_directory_for_dicom(dir_path: String, recursive: bool = true) -> Packe
 func _on_add_question_button_pressed() -> void:
 	var question_panel = create_question_panel()
 	questions_container.add_child(question_panel)
+	
+	# Ensure spacing is applied
+	questions_container.add_theme_constant_override("separation", 20)
+	
+	# Ensure spacing is applied
+	questions_container.add_theme_constant_override("separation", 20)
 
 func create_question_panel() -> PanelContainer:
 	var panel = PanelContainer.new()
+	
+	# Add visual styling to distinguish questions
+	var style_box = StyleBoxFlat.new()
+	style_box.bg_color = Color(0.15, 0.15, 0.18, 1.0)  # Slightly lighter background
+	style_box.border_color = Color(0.4, 0.4, 0.5, 1.0)  # Border color
+	style_box.set_border_width_all(2)
+	style_box.set_corner_radius_all(8)
+	style_box.content_margin_left = 15
+	style_box.content_margin_right = 15
+	style_box.content_margin_top = 15
+	style_box.content_margin_bottom = 15
+	panel.add_theme_stylebox_override("panel", style_box)
+	
+	# Add margin for spacing between questions
+	panel.custom_minimum_size = Vector2(0, 0)
+	
 	var vbox = VBoxContainer.new()
 	vbox.add_theme_constant_override("separation", 10)
 	panel.add_child(vbox)
@@ -308,10 +330,12 @@ func create_question_panel() -> PanelContainer:
 	# Radiology subspecialty
 	var organ_label = Label.new()
 	organ_label.text = "Radiology Subspecialty:"
+	organ_label.add_theme_font_size_override("font_size", 22)
 	vbox.add_child(organ_label)
 	
 	var organ_dropdown = OptionButton.new()
 	organ_dropdown.name = "OrganDropdown"
+	organ_dropdown.add_theme_font_size_override("font_size", 22)
 	organ_dropdown.add_item("General")
 	organ_dropdown.add_item("Chest/Thoracic")
 	organ_dropdown.add_item("Body/Abdominal")
@@ -322,40 +346,51 @@ func create_question_panel() -> PanelContainer:
 	organ_dropdown.add_item("Nuclear Medicine")
 	organ_dropdown.add_item("Emergency Radiology")
 	organ_dropdown.add_item("Other")
+	var organ_popup = organ_dropdown.get_popup()
+	organ_popup.add_theme_font_size_override("font_size", 22)
 	vbox.add_child(organ_dropdown)
 	
 	# Question type
 	var type_label = Label.new()
 	type_label.text = "Question Type:"
+	type_label.add_theme_font_size_override("font_size", 22)
 	vbox.add_child(type_label)
 	
 	var type_dropdown = OptionButton.new()
 	type_dropdown.name = "TypeDropdown"
+	type_dropdown.add_theme_font_size_override("font_size", 22)
 	type_dropdown.add_item("Free Text")
 	type_dropdown.add_item("Multiple Choice")
 	type_dropdown.add_item("Systematic Review")
 	type_dropdown.add_item("Mark Target Area")
 	type_dropdown.selected = 0
+	var type_popup = type_dropdown.get_popup()
+	type_popup.add_theme_font_size_override("font_size", 22)
 	vbox.add_child(type_dropdown)
 	
 	# Question
 	var question_label = Label.new()
 	question_label.text = "Question:"
+	question_label.add_theme_font_size_override("font_size", 22)
 	vbox.add_child(question_label)
 	
 	var question_edit = LineEdit.new()
 	question_edit.name = "QuestionEdit"
+	question_edit.custom_minimum_size = Vector2(0, 48)
+	question_edit.add_theme_font_size_override("font_size", 22)
 	question_edit.placeholder_text = "Question Text Here"
 	vbox.add_child(question_edit)
 	
 	# Free text answer (initially visible)
 	var answer_label = Label.new()
 	answer_label.text = "Expected Answer:"
+	answer_label.add_theme_font_size_override("font_size", 22)
 	vbox.add_child(answer_label)
 	
 	var answer_edit = TextEdit.new()
 	answer_edit.name = "AnswerEdit"
-	answer_edit.custom_minimum_size = Vector2(0, 80)
+	answer_edit.custom_minimum_size = Vector2(0, 125)
+	answer_edit.add_theme_font_size_override("font_size", 22)
 	answer_edit.placeholder_text = "Expected Answer Text Here"
 	vbox.add_child(answer_edit)
 	
@@ -367,6 +402,7 @@ func create_question_panel() -> PanelContainer:
 	
 	var mc_label = Label.new()
 	mc_label.text = "Multiple Choice Options:"
+	mc_label.add_theme_font_size_override("font_size", 22)
 	mc_container.add_child(mc_label)
 	
 	var choices_container = VBoxContainer.new()
@@ -379,11 +415,14 @@ func create_question_panel() -> PanelContainer:
 		
 		var choice_radio = CheckBox.new()
 		choice_radio.text = "Correct"
+		choice_radio.add_theme_font_size_override("font_size", 22)
 		choice_radio.button_group = ButtonGroup.new() if i == 0 else choices_container.get_child(0).get_child(0).button_group
 		choice_hbox.add_child(choice_radio)
 		
 		var choice_edit = LineEdit.new()
 		choice_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		choice_edit.custom_minimum_size = Vector2(0, 48)
+		choice_edit.add_theme_font_size_override("font_size", 22)
 		choice_edit.placeholder_text = "Option %d" % (i + 1)
 		choice_hbox.add_child(choice_edit)
 	
@@ -395,6 +434,7 @@ func create_question_panel() -> PanelContainer:
 	
 	var systematic_label = Label.new()
 	systematic_label.text = "Organ Systems to Review:"
+	systematic_label.add_theme_font_size_override("font_size", 22)
 	systematic_container.add_child(systematic_label)
 	
 	var systems_list_container = VBoxContainer.new()
@@ -403,6 +443,8 @@ func create_question_panel() -> PanelContainer:
 	
 	var add_system_btn = Button.new()
 	add_system_btn.text = "Add Organ System"
+	add_system_btn.custom_minimum_size = Vector2(0, 48)
+	add_system_btn.add_theme_font_size_override("font_size", 22)
 	add_system_btn.pressed.connect(func(): _add_organ_system_item(systems_list_container))
 	systematic_container.add_child(add_system_btn)
 	
@@ -414,26 +456,31 @@ func create_question_panel() -> PanelContainer:
 	
 	var target_area_label = Label.new()
 	target_area_label.text = "Target Area Annotation:"
+	target_area_label.add_theme_font_size_override("font_size", 22)
 	target_area_container.add_child(target_area_label)
 	
 	var target_instruction = Label.new()
 	target_instruction.text = "Instructions:\n1. Ensure DICOM files are loaded\n2. Click 'Open Annotation Editor' to view images and draw annotation\n3. Draw a circle or arrow on the target area\n4. Click 'Save Annotation' to capture it"
-	target_instruction.add_theme_font_size_override("font_size", 10)
+	target_instruction.add_theme_font_size_override("font_size", 16)
 	target_area_container.add_child(target_instruction)
 	
 	var set_target_btn = Button.new()
 	set_target_btn.text = "Open Annotation Editor"
+	set_target_btn.custom_minimum_size = Vector2(0, 48)
+	set_target_btn.add_theme_font_size_override("font_size", 22)
 	set_target_btn.pressed.connect(func(): _open_annotation_editor(panel))
 	target_area_container.add_child(set_target_btn)
 	
 	var target_status = Label.new()
 	target_status.text = "No target area set - Please use annotation tools"
+	target_status.add_theme_font_size_override("font_size", 22)
 	target_status.add_theme_color_override("font_color", Color.ORANGE)
 	target_area_container.add_child(target_status)
 	
 	# Tolerance slider
 	var tolerance_label = Label.new()
 	tolerance_label.text = "Acceptance Tolerance (pixels):"
+	tolerance_label.add_theme_font_size_override("font_size", 22)
 	target_area_container.add_child(tolerance_label)
 	
 	var tolerance_slider = HSlider.new()
@@ -442,10 +489,12 @@ func create_question_panel() -> PanelContainer:
 	tolerance_slider.max_value = 200.0
 	tolerance_slider.value = 50.0
 	tolerance_slider.step = 5.0
+	tolerance_slider.custom_minimum_size = Vector2(0, 48)
 	target_area_container.add_child(tolerance_slider)
 	
 	var tolerance_value_label = Label.new()
 	tolerance_value_label.text = "50 pixels"
+	tolerance_value_label.add_theme_font_size_override("font_size", 22)
 	target_area_container.add_child(tolerance_value_label)
 	
 	tolerance_slider.value_changed.connect(func(value: float):
@@ -455,12 +504,15 @@ func create_question_panel() -> PanelContainer:
 	# Image index
 	var image_ref_label = Label.new()
 	image_ref_label.text = "Reference Image Index (optional):"
+	image_ref_label.add_theme_font_size_override("font_size", 22)
 	vbox.add_child(image_ref_label)
 	
 	var image_ref_spin = SpinBox.new()
 	image_ref_spin.name = "ImageRefSpin"
 	image_ref_spin.min_value = 0
 	image_ref_spin.max_value = 999
+	image_ref_spin.custom_minimum_size = Vector2(0, 48)
+	image_ref_spin.add_theme_font_size_override("font_size", 22)
 	vbox.add_child(image_ref_spin)
 	
 	# Explanation section
@@ -471,16 +523,19 @@ func create_question_panel() -> PanelContainer:
 	
 	var explanation_label = Label.new()
 	explanation_label.text = "Extended Explanation (shown after answer):"
+	explanation_label.add_theme_font_size_override("font_size", 22)
 	explanation_container.add_child(explanation_label)
 	
 	var explanation_edit = TextEdit.new()
-	explanation_edit.custom_minimum_size = Vector2(0, 100)
+	explanation_edit.custom_minimum_size = Vector2(0, 156)
+	explanation_edit.add_theme_font_size_override("font_size", 22)
 	explanation_edit.placeholder_text = "Provide detailed explanation of the correct answer..."
 	explanation_edit.wrap_mode = TextEdit.LINE_WRAPPING_BOUNDARY
 	explanation_container.add_child(explanation_edit)
 	
 	var explanation_images_label = Label.new()
 	explanation_images_label.text = "Explanation Images:"
+	explanation_images_label.add_theme_font_size_override("font_size", 22)
 	explanation_container.add_child(explanation_images_label)
 	
 	var images_list_container = VBoxContainer.new()
@@ -489,12 +544,16 @@ func create_question_panel() -> PanelContainer:
 	
 	var add_image_btn = Button.new()
 	add_image_btn.text = "Add Explanation Image"
+	add_image_btn.custom_minimum_size = Vector2(0, 48)
+	add_image_btn.add_theme_font_size_override("font_size", 22)
 	add_image_btn.pressed.connect(func(): _on_add_explanation_image_pressed(panel))
 	explanation_container.add_child(add_image_btn)
 	
 	# Remove button
 	var remove_btn = Button.new()
 	remove_btn.text = "Remove Question"
+	remove_btn.custom_minimum_size = Vector2(0, 48)
+	remove_btn.add_theme_font_size_override("font_size", 22)
 	remove_btn.pressed.connect(func(): panel.queue_free())
 	vbox.add_child(remove_btn)
 	
@@ -967,6 +1026,8 @@ func _add_organ_system_item(container: VBoxContainer, organ_name: String = "", f
 	finding_dropdown.add_item("Benign Finding")
 	finding_dropdown.add_item("Pathological Finding")
 	finding_dropdown.custom_minimum_size = Vector2(180, 0)
+	var finding_popup = finding_dropdown.get_popup()
+	finding_popup.add_theme_font_size_override("font_size", 22)
 	
 	# Set initial selection based on finding_type
 	match finding_type:

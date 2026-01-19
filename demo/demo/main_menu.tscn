@@ -62,8 +62,8 @@ custom_minimum_size = Vector2(0, 20)
 layout_mode = 2
 
 [node name="WelcomePanel" type="PanelContainer" parent="CenterContainer/MainVBox"]
-custom_minimum_size = Vector2(500, 0)
 layout_mode = 2
+size_flags_horizontal = 3
 
 [node name="WelcomeVBox" type="VBoxContainer" parent="CenterContainer/MainVBox/WelcomePanel"]
 layout_mode = 2
@@ -92,7 +92,7 @@ layout_mode = 2
 [node name="CasesButton" type="Button" parent="CenterContainer/MainVBox"]
 custom_minimum_size = Vector2(300, 60)
 layout_mode = 2
-theme_override_font_sizes/font_size = 20
+size_flags_horizontal = 4
 text = "📁 Browse and Create Cases"
 
 [node name="Spacer3" type="Control" parent="CenterContainer/MainVBox"]

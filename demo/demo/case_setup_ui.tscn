@@ -1,12 +1,14 @@
 [gd_scene load_steps=2 format=3 uid="uid://casesetup001"]
 
-[ext_resource type="Script" path="res://demo/case_setup_ui.gd" id="1"]
+[ext_resource type="Script" uid="uid://dbodpl7456g8v" path="res://demo/case_setup_ui.gd" id="1"]
 
 [node name="CaseSetup" type="Control"]
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
 script = ExtResource("1")
 
 [node name="MarginContainer" type="MarginContainer" parent="."]
@@ -14,6 +16,8 @@ layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
 theme_override_constants/margin_left = 20
 theme_override_constants/margin_top = 20
 theme_override_constants/margin_right = 20
@@ -24,6 +28,7 @@ layout_mode = 2
 
 [node name="Title" type="Label" parent="MarginContainer/VBoxContainer"]
 layout_mode = 2
+theme_override_font_sizes/font_size = 31
 text = "Create New Radiology Case"
 horizontal_alignment = 1
 
@@ -32,36 +37,46 @@ layout_mode = 2
 
 [node name="CaseNameLabel" type="Label" parent="MarginContainer/VBoxContainer"]
 layout_mode = 2
+theme_override_font_sizes/font_size = 22
 text = "Case Name:"
 
 [node name="CaseNameEdit" type="LineEdit" parent="MarginContainer/VBoxContainer"]
+custom_minimum_size = Vector2(0, 48)
 layout_mode = 2
+theme_override_font_sizes/font_size = 22
 placeholder_text = "e.g., Chest CT - Pneumothorax Case 1"
 
 [node name="CaseDescriptionLabel" type="Label" parent="MarginContainer/VBoxContainer"]
 layout_mode = 2
+theme_override_font_sizes/font_size = 22
 text = "Case Description:"
 
 [node name="CaseDescriptionEdit" type="TextEdit" parent="MarginContainer/VBoxContainer"]
-custom_minimum_size = Vector2(0, 100)
+custom_minimum_size = Vector2(0, 156)
 layout_mode = 2
+theme_override_font_sizes/font_size = 22
 placeholder_text = "Brief description of the case..."
 
 [node name="DicomButtonsContainer" type="HBoxContainer" parent="MarginContainer/VBoxContainer"]
 layout_mode = 2
 
 [node name="AddDicomFilesButton" type="Button" parent="MarginContainer/VBoxContainer/DicomButtonsContainer"]
+custom_minimum_size = Vector2(0, 48)
 layout_mode = 2
 size_flags_horizontal = 3
+theme_override_font_sizes/font_size = 22
 text = "Select DICOM Files"
 
 [node name="AddDicomButton" type="Button" parent="MarginContainer/VBoxContainer/DicomButtonsContainer"]
+custom_minimum_size = Vector2(0, 48)
 layout_mode = 2
 size_flags_horizontal = 3
+theme_override_font_sizes/font_size = 22
 text = "Select DICOM Folder"
 
 [node name="DicomStatus" type="Label" parent="MarginContainer/VBoxContainer"]
 layout_mode = 2
+theme_override_font_sizes/font_size = 22
 text = "No DICOM files loaded"
 
 [node name="HSeparator2" type="HSeparator" parent="MarginContainer/VBoxContainer"]
@@ -69,6 +84,7 @@ layout_mode = 2
 
 [node name="QuestionsLabel" type="Label" parent="MarginContainer/VBoxContainer"]
 layout_mode = 2
+theme_override_font_sizes/font_size = 22
 text = "Questions:"
 
 [node name="ScrollContainer" type="ScrollContainer" parent="MarginContainer/VBoxContainer"]
@@ -78,9 +94,12 @@ size_flags_vertical = 3
 [node name="QuestionsContainer" type="VBoxContainer" parent="MarginContainer/VBoxContainer/ScrollContainer"]
 layout_mode = 2
 size_flags_horizontal = 3
+theme_override_constants/separation = 20
 
 [node name="AddQuestionButton" type="Button" parent="MarginContainer/VBoxContainer"]
+custom_minimum_size = Vector2(0, 48)
 layout_mode = 2
+theme_override_font_sizes/font_size = 22
 text = "Add Question"
 
 [node name="HSeparator3" type="HSeparator" parent="MarginContainer/VBoxContainer"]
@@ -90,22 +109,26 @@ layout_mode = 2
 layout_mode = 2
 
 [node name="BackButton" type="Button" parent="MarginContainer/VBoxContainer/ButtonsContainer"]
+custom_minimum_size = Vector2(0, 48)
 layout_mode = 2
 size_flags_horizontal = 3
+theme_override_font_sizes/font_size = 22
 text = "Back to Menu"
 
 [node name="SaveButton" type="Button" parent="MarginContainer/VBoxContainer/ButtonsContainer"]
+custom_minimum_size = Vector2(0, 48)
 layout_mode = 2
 size_flags_horizontal = 3
+theme_override_font_sizes/font_size = 22
 text = "Save Case"
 
 [node name="FileDialog" type="FileDialog" parent="."]
-title = "Select DICOM Files"
+title = "Open File(s)"
 size = Vector2i(800, 600)
 file_mode = 1
 
 [node name="FolderDialog" type="FileDialog" parent="."]
-title = "Select DICOM Folder"
+title = "Open a Directory"
 size = Vector2i(800, 600)
 file_mode = 2
 
