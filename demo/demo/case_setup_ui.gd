@@ -461,7 +461,7 @@ func create_question_panel() -> PanelContainer:
 	
 	var target_instruction = Label.new()
 	target_instruction.text = "Instructions:\n1. Ensure DICOM files are loaded\n2. Click 'Open Annotation Editor' to view images and draw annotation\n3. Draw a circle or arrow on the target area\n4. Click 'Save Annotation' to capture it"
-	target_instruction.add_theme_font_size_override("font_size", 16)
+	target_instruction.add_theme_font_size_override("font_size", 22)
 	target_area_container.add_child(target_instruction)
 	
 	var set_target_btn = Button.new()
@@ -514,6 +514,11 @@ func create_question_panel() -> PanelContainer:
 	image_ref_spin.custom_minimum_size = Vector2(0, 48)
 	image_ref_spin.add_theme_font_size_override("font_size", 22)
 	vbox.add_child(image_ref_spin)
+	
+	# Set font size for the internal LineEdit
+	var spin_line_edit = image_ref_spin.get_line_edit()
+	if spin_line_edit:
+		spin_line_edit.add_theme_font_size_override("font_size", 22)
 	
 	# Explanation section
 	var explanation_container = VBoxContainer.new()
@@ -1014,18 +1019,21 @@ func _add_organ_system_item(container: VBoxContainer, organ_name: String = "", f
 	var name_edit = LineEdit.new()
 	name_edit.placeholder_text = "Organ System (e.g., Lungs, Heart, Liver)"
 	name_edit.text = organ_name
-	name_edit.custom_minimum_size = Vector2(200, 0)
+	name_edit.custom_minimum_size = Vector2(200, 48)
+	name_edit.add_theme_font_size_override("font_size", 22)
 	system_hbox.add_child(name_edit)
 	
 	var finding_label = Label.new()
 	finding_label.text = "Finding:"
+	finding_label.add_theme_font_size_override("font_size", 22)
 	system_hbox.add_child(finding_label)
 	
 	var finding_dropdown = OptionButton.new()
+	finding_dropdown.add_theme_font_size_override("font_size", 22)
 	finding_dropdown.add_item("No Finding")
 	finding_dropdown.add_item("Benign Finding")
 	finding_dropdown.add_item("Pathological Finding")
-	finding_dropdown.custom_minimum_size = Vector2(180, 0)
+	finding_dropdown.custom_minimum_size = Vector2(180, 48)
 	var finding_popup = finding_dropdown.get_popup()
 	finding_popup.add_theme_font_size_override("font_size", 22)
 	
@@ -1042,6 +1050,8 @@ func _add_organ_system_item(container: VBoxContainer, organ_name: String = "", f
 	
 	var remove_btn = Button.new()
 	remove_btn.text = "Remove"
+	remove_btn.custom_minimum_size = Vector2(0, 48)
+	remove_btn.add_theme_font_size_override("font_size", 22)
 	remove_btn.pressed.connect(func(): system_panel.queue_free())
 	system_hbox.add_child(remove_btn)
 	
