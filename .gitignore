@@ -60,3 +60,14 @@ compile_commands.json
 # Cmake
 cmake-build*
 CMakeUserPresets.json
+
+# Ignore apple api key
+Authkey_R2SGGU5NY5.p8
+
+# Ignore app exports
+RadiologySimulator.dmg
+RadiologySimulator.pkg
+RadiologySimulator.zip
+
+# Ignore Provision Profiles
+.provisionprofile

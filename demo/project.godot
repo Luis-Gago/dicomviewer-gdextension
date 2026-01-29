@@ -13,7 +13,13 @@ config_version=5
 config/name="Radiology Simulator"
 run/main_scene="uid://mainmenu001"
 config/features=PackedStringArray("4.5", "Forward Plus")
+boot_splash/bg_color=Color(0.77254903, 0.78431374, 0.7882353, 1)
+boot_splash/image="uid://cgxy5fusk2tmu"
 config/icon="res://icon.svg"
+
+[display]
+
+window/size/mode=3
 
 [rendering]
 
